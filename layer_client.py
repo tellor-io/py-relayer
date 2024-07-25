@@ -88,19 +88,34 @@ def get_next_validator_set_timestamp(given_timestamp):
     next_ts = get_validator_timestamp_by_index(next_ts_index).get("timestamp")
     return next_ts
 
-def query_validator_set_update(last_known_timestamp):
-    current_ts = get_current_validator_set_timestamp().get("timestamp")
-    if int(current_ts) > int(last_known_timestamp):
-        next_ts = get_next_validator_set_timestamp(last_known_timestamp)
-        valset_sigs = get_valset_sigs(next_ts)
-        valset_checkpoint = get_validator_checkpoint_params(next_ts)
-        print("\nvalset_sigs: ", valset_sigs)
-        print("\nvalset_checkpoint: ", valset_checkpoint)
+def get_previous_validator_set_timestamp(given_timestamp):
+    given_ts_index = get_validator_set_index_by_timestamp(given_timestamp).get("index")
+    previous_ts_index = str(int(given_ts_index) - 1)
+    previous_ts = get_validator_timestamp_by_index(previous_ts_index).get("timestamp")
+    return previous_ts
 
+def query_validator_set_update(given_timestamp):
+    valset_sigs = get_valset_sigs(given_timestamp)
+    valset_checkpoint = get_validator_checkpoint_params(given_timestamp)
+    previous_timestamp = get_previous_validator_set_timestamp(given_timestamp)
+    previous_valset = get_valset_by_timestamp(previous_timestamp)
+    valset_update_params = {
+        "valset_sigs": valset_sigs,
+        "valset_checkpoint": valset_checkpoint,
+        "previous_valset": previous_valset
+    }
+    return valset_update_params
 
+def get_blobstream_init_params():
+    first_timestamp = get_validator_timestamp_by_index(0).get("timestamp")
+    checkpoint_params = get_validator_checkpoint_params(first_timestamp)
+    return checkpoint_params
+
+def get_layer_latest_validator_timestamp():
+    return get_current_validator_set_timestamp().get("timestamp")
 
 # assemble_latest_layer_proof(query_id)
 
-last_known_timestamp = get_validator_timestamp_by_index(0).get("timestamp")
-print("\nlast_known_timestamp: ", last_known_timestamp)
-query_validator_set_update(last_known_timestamp)
+# last_known_timestamp = get_validator_timestamp_by_index(0).get("timestamp")
+# print("\nlast_known_timestamp: ", last_known_timestamp)
+# query_validator_set_update(last_known_timestamp)
