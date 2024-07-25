@@ -1,7 +1,7 @@
+# layer_client.py
 import requests
 import time
 
-query_id = "0x83a7f3d48786ac2667503a61e8c415438ed2922eb86a2906e4ee66d9a2ce4992" # eth/usd
 rpc_endpoint = "http://localhost:1317"
 
 def strip_0x(value):
@@ -42,43 +42,44 @@ def get_validator_set_index_by_timestamp(timestamp):
 
 # oracle data functions 
 def get_data_before(query_id, timestamp_before):
-    # http://localhost:1317/tellor-io/layer/oracle/get_data_before/83a7f3d48786ac2667503a61e8c415438ed2922eb86a2906e4ee66d9a2ce4992/1721672771868
     query_id = strip_0x(query_id)
     request = f"{rpc_endpoint}/tellor-io/layer/oracle/get_data_before/{query_id}/{timestamp_before}"
     response = requests.get(request)
     return response.json()
 
 def get_snapshots_by_report(query_id, timestamp):
-    # "http://localhost:1317/layer/bridge/get_snapshots_by_report/83a7f3d48786ac2667503a61e8c415438ed2922eb86a2906e4ee66d9a2ce4992/1721672771868""
     query_id = strip_0x(query_id)
     request = f"{rpc_endpoint}/layer/bridge/get_snapshots_by_report/{query_id}/{timestamp}"
     response = requests.get(request)
     return response.json()
 
 def get_attestations_by_snapshot(snapshot):
-    # "http://localhost:1317/layer/bridge/get_attestations_by_snapshot/df077f3d8e8a9f62533289d3bac8b82fd26c9c4cc1d79657463178140cc1ee26"
     request = f"{rpc_endpoint}/layer/bridge/get_attestations_by_snapshot/{snapshot}"
     response = requests.get(request)
     return response.json()
 
 def get_attestation_data_by_snapshot(snapshot):
-    # "http://localhost:1317/layer/bridge/get_attestation_data_by_snapshot/df077f3d8e8a9f62533289d3bac8b82fd26c9c4cc1d79657463178140cc1ee26"
     request = f"{rpc_endpoint}/layer/bridge/get_attestation_data_by_snapshot/{snapshot}"
     response = requests.get(request)
     return response.json()
 
+## queries
 
 def query_latest_oracle_data(query_id):
-    current_time = int(time.time()) * 1000
+    # subtract 1 second to account attestation time,
+    # TODO: optimize
+    current_time = int(time.time()) * 1000 - 1000 
     report = get_data_before(query_id, current_time)
     snapshots = get_snapshots_by_report(query_id, report["timestamp"])
     last_snapshot = snapshots["snapshots"][-1]
     attestations = get_attestations_by_snapshot(last_snapshot)
     attestation_data = get_attestation_data_by_snapshot(last_snapshot)
+    current_validator_set = get_current_validator_set()
     oracle_proof = {
-        "report": report,
         "attestations": attestations,
-        "attestation_data": attestation_data
+        "attestation_data": attestation_data,
+        "validator_set": current_validator_set,
+        "snapshot": last_snapshot
     }
     return oracle_proof
 
@@ -114,8 +115,7 @@ def get_blobstream_init_params():
 def get_layer_latest_validator_timestamp():
     return get_current_validator_set_timestamp().get("timestamp")
 
-# assemble_latest_layer_proof(query_id)
+def get_current_validator_set():
+    latest_timestamp = get_layer_latest_validator_timestamp()
+    return get_valset_by_timestamp(latest_timestamp)
 
-# last_known_timestamp = get_validator_timestamp_by_index(0).get("timestamp")
-# print("\nlast_known_timestamp: ", last_known_timestamp)
-# query_validator_set_update(last_known_timestamp)
