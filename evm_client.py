@@ -59,13 +59,16 @@ def init_blobstream(init_tx_params):
 def update_validator_set(update_tx_params):
     print("Updating validator set...")
     print("Update tx params: ", update_tx_params)
-    # blobstream_contract.functions.updateValidatorSet(
-    #     update_tx_params["new_validator_set_hash"],
-    #     update_tx_params["new_power_threshold"],
-    #     update_tx_params["new_validator_timestamp"],
-    #     update_tx_params["current_validator_set"],
-    #     update_tx_params["sigs"]
-    # ).transact()
+    blobstream_contract.functions.updateValidatorSet(
+        update_tx_params["new_validator_set_hash"],
+        update_tx_params["new_power_threshold"],
+        update_tx_params["new_validator_timestamp"],
+        update_tx_params["current_validator_set"],
+        update_tx_params["sigs"]
+    ).transact()
 
     print("updateSigs")
+    print("v: ", update_tx_params["sigs"][0]["v"])
+    print("r: ", update_tx_params["sigs"][0]["r"].hex())
+    print("s: ", update_tx_params["sigs"][0]["s"].hex())
     blobstream_contract.functions.updateSigs(update_tx_params["sigs"]).transact()

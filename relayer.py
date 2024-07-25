@@ -52,8 +52,9 @@ def update_to_latest_layer_validator_set(blobstream_validator_timestamp, layer_v
         valset_update_tx = update_validator_set(valset_update_tx_params)
         print("Valset update tx: ", valset_update_tx)
         blobstream_validator_timestamp = get_blobstream_validator_timestamp()
-        # print("Blobstream validator timestamp: ", blobstream_validator_timestamp)
-    
+        print("Blobstream validator timestamp: ", blobstream_validator_timestamp)
+        # break
+
     print("Blobstream valset up to date with Layer valset")
         
 
