@@ -1,11 +1,15 @@
 from web3 import Web3, Account
 from web3.types import HexBytes
 import json
+import os
+from dotenv import load_dotenv
 
-blobstream_address = "0x447786d977Ea11Ad0600E193b2d07A06EfB53e5F"
-layer_user_address = "0x6DcBc91229d812910b54dF91b5c2b592572CD6B0"
-provider_url = "http://127.0.0.1:8545"
-private_key = "96e9178d78da25aa25aaa2af908dda3c421029e8d8c6cca355c21a50a68c8870"
+load_dotenv()
+
+blobstream_address = os.getenv("BLOBSTREAM_CONTRACT_ADDRESS")
+layer_user_address = os.getenv("LAYER_USER_CONTRACT_ADDRESS")
+provider_url = os.getenv("WEB3_PROVIDER_URL")
+private_key = os.getenv("ETH_PRIVATE_KEY")
 
 web3_instance = None
 blobstream_contract = None

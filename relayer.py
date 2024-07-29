@@ -1,11 +1,16 @@
-from layer_client import query_validator_set_update, query_latest_oracle_data, get_blobstream_init_params, get_layer_latest_validator_timestamp, get_next_validator_set_timestamp
+from layer_client import query_validator_set_update, query_latest_oracle_data, get_blobstream_init_params, get_layer_latest_validator_timestamp, get_next_validator_set_timestamp, get_layer_chain_status
 from evm_client import init_web3, get_blobstream_validator_timestamp, init_blobstream, update_validator_set, get_current_price_data_timestamp, update_oracle_data
 from transformer import transform_blobstream_init_params, transform_valset_update_params, transform_oracle_update_params
+from email_client import send_email_alert
 import time
+import os
+from dotenv import load_dotenv
 
-blobstream_contract_address = "0x0000000000000000000000000000000000000000"
-query_id = "0x83a7f3d48786ac2667503a61e8c415438ed2922eb86a2906e4ee66d9a2ce4992" # eth/usd
-sleep_time = 5
+load_dotenv()
+
+blobstream_contract_address = os.getenv("BLOBSTREAM_CONTRACT_ADDRESS")
+query_id = os.getenv("QUERY_ID")
+sleep_time = int(os.getenv("SLEEP_TIME"))
 
 def start_relayer():
     print("relayer: Starting relayer...")
@@ -24,6 +29,10 @@ def start_relayer():
 
     while True:
         time.sleep(sleep_time)
+        e = check_layer_chain_status()
+        if e:
+            print("relayer: Error checking layer chain status: ", e)
+            continue
         layer_validator_timestamp, e = get_layer_latest_validator_timestamp()
         if e:
             print("relayer: Error getting latest Layer validator timestamp: ", e)
@@ -91,6 +100,15 @@ def update_user_oracle_data(query_id) -> Exception:
         print("relayer: Oracle data updated: ", tx_hash.hex())
     else:
         print("relayer: No new oracle data available")
+    return None
+
+def check_layer_chain_status() -> Exception:
+    message, e = get_layer_chain_status()
+    print("relayer: Layer chain status message: ", message)
+    if message is not None:
+        e = send_email_alert("Layer chain status alert", message)
+        if e:
+            return e
     return None
 
 start_relayer()
