@@ -85,8 +85,10 @@ def update_user_oracle_data(query_id) -> Exception:
         print("relayer: New oracle data available, updating...")
         oracle_update_tx_params = transform_oracle_update_params(oracle_proof)
         print("relayer: Oracle update tx params: ", oracle_update_tx_params)
-        update_oracle_data(oracle_update_tx_params)
-        print("relayer: Oracle data updated")
+        tx_hash, e = update_oracle_data(oracle_update_tx_params)
+        if e:
+            return e
+        print("relayer: Oracle data updated: ", tx_hash.hex())
     else:
         print("relayer: No new oracle data available")
     return None

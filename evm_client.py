@@ -1,4 +1,5 @@
 from web3 import Web3, Account
+from web3.types import HexBytes
 import json
 
 blobstream_address = "0x447786d977Ea11Ad0600E193b2d07A06EfB53e5F"
@@ -86,15 +87,16 @@ def update_validator_set(update_tx_params):
         print("evm_client: Error updating validator set: ", e)
         # raise e
 
-def update_oracle_data(update_tx_params):
+def update_oracle_data(update_tx_params) -> (HexBytes, Exception):
     print("evm_client: Updating oracle data...")
     print("evm_client: Update tx params: ", update_tx_params)
     try:
-        layer_user_contract.functions.updateOracleData(
+        tx_hash = layer_user_contract.functions.updateOracleData(
             update_tx_params["oracle_attestation_data"],
             update_tx_params["current_validator_set"],
             update_tx_params["sigs"]
         ).transact()
     except Exception as e:
         print("evm_client: Error updating oracle data: ", e)
-        # raise e
+        return None, e
+    return tx_hash, None
