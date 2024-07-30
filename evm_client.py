@@ -14,6 +14,7 @@ private_key = os.getenv("ETH_PRIVATE_KEY")
 web3_instance = None
 blobstream_contract = None
 layer_user_contract = None
+web3_acct = None
 
 def init_web3():
     connect_web3()
@@ -32,6 +33,8 @@ def connect_web3():
     print("evm_client: Current block number: ", web3.eth.block_number)
     global web3_instance
     web3_instance = web3
+    global web3_acct
+    web3_acct = acct
 
 def setup_contracts():
     with open("abis/BlobstreamO.json") as f:
@@ -58,6 +61,9 @@ def get_blobstream_validator_timestamp():
 
 def get_current_price_data_timestamp():
     print("evm_client: Getting current price data...")
+    value_count = layer_user_contract.functions.getValueCount().call()
+    if value_count == 0:
+        return 0
     price_data = layer_user_contract.functions.getCurrentPriceData().call()
     timestamp = price_data[1] # timestamp
     return timestamp
@@ -66,41 +72,83 @@ def init_blobstream(init_tx_params):
     print("evm_client: Initializing Blobstream...")
     print("evm_client: Init tx params: ", init_tx_params)
     try:
-        blobstream_contract.functions.init(
+        # Build the transaction
+        tx = blobstream_contract.functions.init(
             init_tx_params["power_threshold"], 
             init_tx_params["validator_timestamp"], 
             init_tx_params["unbonding_period"], 
             init_tx_params["validator_set_checkpoint"]
-        ).transact()
+        ).build_transaction({
+            'from': web3_acct.address,
+            'nonce': web3_instance.eth.get_transaction_count(web3_acct.address),
+            'gas': 300000,
+            'gasPrice': web3_instance.eth.gas_price,
+        })
+
+        print("evm_client: Tx: ", tx)
+
+        # Sign the transaction
+        signed_tx = web3_instance.eth.account.sign_transaction(tx, private_key=private_key)
+        print("evm_client: Signed transaction: ", signed_tx)
+
+        # Send the transaction
+        tx_hash = web3_instance.eth.send_raw_transaction(signed_tx.rawTransaction)
+        print("evm_client: Tx hash: ", tx_hash)
+        return tx_hash
     except Exception as e:
         print("evm_client: Error initializing Blobstream: ", e)
-        # raise e 
+        return None
+ 
+def read_deployer_address():
+    print("evm_client: Reading deployer address...")
+    deployer_address = blobstream_contract.functions.deployer().call()
+    print("evm_client: Deployer address: ", deployer_address)
+    return deployer_address
 
 def update_validator_set(update_tx_params):
     print("evm_client: Updating validator set...")
     print("evm_client: Update tx params: ", update_tx_params)
     try:
-        blobstream_contract.functions.updateValidatorSet(
+        tx = blobstream_contract.functions.updateValidatorSet(
             update_tx_params["new_validator_set_hash"],
             update_tx_params["new_power_threshold"],
             update_tx_params["new_validator_timestamp"],
             update_tx_params["current_validator_set"],
             update_tx_params["sigs"]
-        ).transact()
+        ).build_transaction({
+            'from': web3_acct.address,
+            'nonce': web3_instance.eth.get_transaction_count(web3_acct.address),
+            'gas': 2000000,  
+            'gasPrice': web3_instance.eth.gas_price,
+        })
+        print("evm_client: Tx: ", tx)
+        signed_tx = web3_instance.eth.account.sign_transaction(tx, private_key=private_key)
+        tx_hash = web3_instance.eth.send_raw_transaction(signed_tx.rawTransaction)
+        print("evm_client: Tx hash: ", tx_hash)
+        return tx_hash
     except Exception as e:
         print("evm_client: Error updating validator set: ", e)
-        # raise e
+        return None
 
 def update_oracle_data(update_tx_params) -> (HexBytes, Exception):
     print("evm_client: Updating oracle data...")
     print("evm_client: Update tx params: ", update_tx_params)
     try:
-        tx_hash = layer_user_contract.functions.updateOracleData(
+        tx = layer_user_contract.functions.updateOracleData(
             update_tx_params["oracle_attestation_data"],
             update_tx_params["current_validator_set"],
             update_tx_params["sigs"]
-        ).transact()
+        ).build_transaction({
+            'from': web3_acct.address,
+            'nonce': web3_instance.eth.get_transaction_count(web3_acct.address),
+            'gas': 2000000,  
+            'gasPrice': web3_instance.eth.gas_price,
+        })
+        print("evm_client: Tx: ", tx)
+        signed_tx = web3_instance.eth.account.sign_transaction(tx, private_key=private_key)
+        tx_hash = web3_instance.eth.send_raw_transaction(signed_tx.rawTransaction)
+        print("evm_client: Tx hash: ", tx_hash)
+        return tx_hash, None
     except Exception as e:
         print("evm_client: Error updating oracle data: ", e)
         return None, e
-    return tx_hash, None
