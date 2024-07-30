@@ -3,6 +3,7 @@ import requests
 import time
 import os
 from dotenv import load_dotenv
+from time import sleep
 
 load_dotenv()
 
@@ -23,7 +24,7 @@ def get_layer_chain_status() -> (str, Exception):
             return message, None
         catching_up_status = response.json().get("result").get("sync_info").get("catching_up")
         if catching_up_status == "true":
-            message = "Layer chain is catching up"
+            message = "layer_client: Layer chain is catching up"
             return message, None
         return None, None
     except Exception as e:
@@ -127,6 +128,7 @@ def get_attestation_data_by_snapshot(snapshot) -> (dict, Exception):
 ## queries
 
 def query_latest_oracle_data(query_id) -> (dict, Exception):
+    print("layer_client: Querying latest oracle data")
     # subtract 1 second to account for attestation time,
     # TODO: optimize
     current_time = int(time.time()) * 1000 - 1000 
@@ -146,6 +148,28 @@ def query_latest_oracle_data(query_id) -> (dict, Exception):
     current_validator_set, e = get_current_validator_set()
     if e:
         return None, e
+    threshold, e = get_current_power_threshold()
+    if e:
+        return None, e
+    sufficient_power = get_sufficient_attestation_power(
+        attestations.get("attestations"), 
+        current_validator_set.get("bridge_validator_set"), 
+        threshold
+    )
+    if not sufficient_power:
+        retry_sleep_time = 3
+        print(f"layer_client: Insufficient attestation power, sleeping for {retry_sleep_time} seconds")
+        sleep(retry_sleep_time)
+        attestations, e = get_attestations_by_snapshot(last_snapshot)
+        if e:
+            return None, e
+        sufficient_power = get_sufficient_attestation_power(
+            attestations.get("attestations"), 
+            current_validator_set.get("bridge_validator_set"), 
+            threshold
+        )
+        if not sufficient_power:
+            return None, Exception("layer_client: Insufficient attestation power")
     oracle_proof = {
         "attestations": attestations,
         "attestation_data": attestation_data,
@@ -153,6 +177,13 @@ def query_latest_oracle_data(query_id) -> (dict, Exception):
         "snapshot": last_snapshot
     }
     return oracle_proof, None
+
+def get_sufficient_attestation_power(attestations, current_validator_set, threshold) -> bool:
+    power_sum = 0
+    for i in range(len(attestations)):
+        if len(attestations[i]) > 0:
+            power_sum += int(current_validator_set[i]["power"])
+    return power_sum >= int(threshold)
 
 def get_next_validator_set_timestamp(given_timestamp) -> (str, Exception):
     given_ts_index, e = get_validator_set_index_by_timestamp(given_timestamp)
@@ -217,4 +248,14 @@ def get_current_validator_set() -> (dict, Exception):
     if e:
         return None, e
     return valset, None
+
+def get_current_power_threshold() -> (int, Exception):
+    latest_timestamp, e = get_layer_latest_validator_timestamp()
+    if e:
+        return None, e
+    checkpoint_params, e = get_validator_checkpoint_params(latest_timestamp)
+    print("checkpoint_params: ", checkpoint_params)
+    if e:
+        return None, e
+    return checkpoint_params.get("power_threshold"), None
 

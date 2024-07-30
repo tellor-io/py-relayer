@@ -1,7 +1,5 @@
 # transformer.py
 from web3 import Web3
-from evm_client import get_web3_instance
-from eth_account.messages import encode_defunct
 from hashlib import sha256
 from eth_keys import keys
 from eth_utils import decode_hex
@@ -104,7 +102,7 @@ def derive_signatures(signatures, validator_set, checkpoint):
                 "r": "0x0000000000000000000000000000000000000000000000000000000000000000",
                 "s": "0x0000000000000000000000000000000000000000000000000000000000000000"
             })
-            
+
     return derived_signatures
 
 def ecrecover_raw_message(message, v, r, s):
