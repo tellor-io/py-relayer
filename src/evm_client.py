@@ -6,10 +6,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-blobstream_address = os.getenv("BLOBSTREAM_CONTRACT_ADDRESS")
-layer_user_address = os.getenv("LAYER_USER_CONTRACT_ADDRESS")
-provider_url = os.getenv("WEB3_PROVIDER_URL")
-private_key = os.getenv("ETH_PRIVATE_KEY")
+BLOBSTREAM_ADDRESS = os.getenv("BLOBSTREAM_CONTRACT_ADDRESS")
+LAYER_USER_ADDRESS = os.getenv("LAYER_USER_CONTRACT_ADDRESS")
+PROVIDER_URL = os.getenv("WEB3_PROVIDER_URL")
+PRIVATE_KEY = os.getenv("ETH_PRIVATE_KEY")
 
 web3_instance = None
 blobstream_contract = None
@@ -22,10 +22,10 @@ def init_web3():
 
 def connect_web3():
     # setup provider
-    web3 = Web3(Web3.HTTPProvider(provider_url))
+    web3 = Web3(Web3.HTTPProvider(PROVIDER_URL))
     # set private key
     web3.eth.account.enable_unaudited_hdwallet_features()
-    acct = Account.from_key(private_key)
+    acct = Account.from_key(PRIVATE_KEY)
     web3.eth.defaultAccount = acct.address
     print("evm_client: Connected to Ethereum node: ", web3.is_connected())
     print("evm_client: Using network: ", web3.eth.chain_id)
@@ -41,13 +41,13 @@ def setup_contracts():
         abi = json.load(f)["abi"]
 
     global blobstream_contract
-    blobstream_contract = web3_instance.eth.contract(address=blobstream_address, abi=abi)
+    blobstream_contract = web3_instance.eth.contract(address=BLOBSTREAM_ADDRESS, abi=abi)
 
     with open("abis/SimpleLayerUser.json") as f:
         abi = json.load(f)["abi"]
 
     global layer_user_contract
-    layer_user_contract = web3_instance.eth.contract(address=layer_user_address, abi=abi)
+    layer_user_contract = web3_instance.eth.contract(address=LAYER_USER_ADDRESS, abi=abi)
     print("evm_client: Layer user contract: ", layer_user_contract.address)
     print("evm_client: Blobstream contract: ", blobstream_contract.address)
 
@@ -88,7 +88,7 @@ def init_blobstream(init_tx_params):
         print("evm_client: Tx: ", tx)
 
         # Sign the transaction
-        signed_tx = web3_instance.eth.account.sign_transaction(tx, private_key=private_key)
+        signed_tx = web3_instance.eth.account.sign_transaction(tx, private_key=PRIVATE_KEY)
         print("evm_client: Signed transaction: ", signed_tx)
 
         # Send the transaction
@@ -122,7 +122,7 @@ def update_validator_set(update_tx_params):
             'gasPrice': web3_instance.eth.gas_price,
         })
         print("evm_client: Tx: ", tx)
-        signed_tx = web3_instance.eth.account.sign_transaction(tx, private_key=private_key)
+        signed_tx = web3_instance.eth.account.sign_transaction(tx, private_key=PRIVATE_KEY)
         tx_hash = web3_instance.eth.send_raw_transaction(signed_tx.rawTransaction)
         print("evm_client: Tx hash: ", tx_hash)
         return tx_hash
@@ -145,7 +145,7 @@ def update_oracle_data(update_tx_params) -> (HexBytes, Exception):
             'gasPrice': web3_instance.eth.gas_price,
         })
         print("evm_client: Tx: ", tx)
-        signed_tx = web3_instance.eth.account.sign_transaction(tx, private_key=private_key)
+        signed_tx = web3_instance.eth.account.sign_transaction(tx, private_key=PRIVATE_KEY)
         tx_hash = web3_instance.eth.send_raw_transaction(signed_tx.rawTransaction)
         print("evm_client: Tx hash: ", tx_hash.hex())
         return tx_hash, None

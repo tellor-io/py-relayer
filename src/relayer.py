@@ -8,9 +8,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-blobstream_contract_address = os.getenv("BLOBSTREAM_CONTRACT_ADDRESS")
-query_id = os.getenv("QUERY_ID")
-sleep_time = int(os.getenv("SLEEP_TIME"))
+QUERY_ID = os.getenv("QUERY_ID")
+SLEEP_TIME = int(os.getenv("SLEEP_TIME"))
+VALSET_SLEEP_TIME = 90
 
 def start_relayer():
     print("relayer: Starting relayer...")
@@ -28,7 +28,7 @@ def start_relayer():
             return
 
     while True:
-        time.sleep(sleep_time)
+        time.sleep(SLEEP_TIME)
         e = check_layer_chain_status()
         if e:
             print("relayer: Error checking layer chain status: ", e)
@@ -46,7 +46,7 @@ def start_relayer():
             if e:
                 print("relayer: Error updating to latest Layer validator set: ", e)
                 continue
-        e = update_user_oracle_data(query_id)
+        e = update_user_oracle_data(QUERY_ID)
         if e:
             print("relayer: Error updating user oracle data: ", e)
             continue
@@ -76,7 +76,8 @@ def update_to_latest_layer_validator_set(blobstream_validator_timestamp, layer_v
         print("relayer: Valset update tx params: ", valset_update_tx_params)
         valset_update_tx = update_validator_set(valset_update_tx_params)
         print("relayer: Valset update tx: ", valset_update_tx)
-        time.sleep(sleep_time)
+        time.sleep(VALSET_SLEEP_TIME)
+        layer_validator_timestamp = get_layer_latest_validator_timestamp()
         blobstream_validator_timestamp = get_blobstream_validator_timestamp()
         print("relayer: Blobstream validator timestamp: ", blobstream_validator_timestamp)
 

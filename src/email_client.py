@@ -6,14 +6,14 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-sender_username=os.getenv("EMAIL_USERNAME")
-sender_email=f"{sender_username}@gmail.com"
-recipients=os.getenv("EMAIL_RECIPIENTS").split(",")
-password=os.getenv("EMAIL_PASSWORD")
+SENDER_USERNAME=os.getenv("EMAIL_USERNAME")
+SENDER_EMAIL=f"{SENDER_USERNAME}@gmail.com"
+RECIPIENTS=os.getenv("EMAIL_RECIPIENTS").split(",")
+PASSWORD=os.getenv("EMAIL_PASSWORD")
 
 def send_email_alert(subject, message) -> Exception:
     try:
-        send_email(subject, message, sender_username, sender_email, recipients, password)
+        send_email(subject, message, SENDER_USERNAME, SENDER_EMAIL, RECIPIENTS, PASSWORD)
     except Exception as e:
         print(f"Error sending email: {e}")
         return e
