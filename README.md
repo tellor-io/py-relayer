@@ -37,5 +37,5 @@ The "email" section of the .env file is optional. If you want to receive emails 
 ## Run the Relayer
 
 ```bash
-python3 relayer.py
+python3 src/relayer.py
 ```

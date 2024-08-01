@@ -28,7 +28,7 @@ def connect_web3():
     acct = Account.from_key(private_key)
     web3.eth.defaultAccount = acct.address
     print("evm_client: Connected to Ethereum node: ", web3.is_connected())
-    print("evm_client: Using network: ", "local")
+    print("evm_client: Using network: ", web3.eth.chain_id)
     print("evm_client: Using address: ", web3.eth.defaultAccount)
     print("evm_client: Current block number: ", web3.eth.block_number)
     global web3_instance
@@ -147,7 +147,7 @@ def update_oracle_data(update_tx_params) -> (HexBytes, Exception):
         print("evm_client: Tx: ", tx)
         signed_tx = web3_instance.eth.account.sign_transaction(tx, private_key=private_key)
         tx_hash = web3_instance.eth.send_raw_transaction(signed_tx.rawTransaction)
-        print("evm_client: Tx hash: ", tx_hash)
+        print("evm_client: Tx hash: ", tx_hash.hex())
         return tx_hash, None
     except Exception as e:
         print("evm_client: Error updating oracle data: ", e)
