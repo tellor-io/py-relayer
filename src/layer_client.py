@@ -4,6 +4,8 @@ import time
 import os
 from dotenv import load_dotenv
 from time import sleep
+from datetime import datetime
+from dateutil import parser
 
 load_dotenv()
 
@@ -25,6 +27,14 @@ def get_layer_chain_status() -> (str, Exception):
         catching_up_status = response.json().get("result").get("sync_info").get("catching_up")
         if catching_up_status == "true":
             message = "layer_client: Layer chain is catching up"
+            return message, None
+        latest_block_time_str = response.json().get("result").get("sync_info").get("latest_block_time") 
+        latest_block_time = parser.parse(latest_block_time_str)
+        latest_block_time = latest_block_time.timestamp()
+        current_time = int(time.time())
+        time_diff = current_time - latest_block_time
+        if time_diff > 60:
+            message = "layer_client: Latest block more than 1 minute old"
             return message, None
         return None, None
     except Exception as e:

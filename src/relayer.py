@@ -109,8 +109,8 @@ def check_layer_chain_status() -> Exception:
     if os.getenv("EMAIL_PASSWORD") is None:
         return None
     message, e = get_layer_chain_status()
-    print("relayer: Layer chain status message: ", message)
     if message is not None:
+        print("relayer: Layer chain status message: ", message)
         e = send_email_alert("Layer chain status alert", message)
         if e:
             return e

@@ -26,6 +26,7 @@ multidict==6.0.5
 parsimonious==0.10.0
 protobuf==5.27.2
 pycryptodome==3.20.0
+python-dateutil==2.9.0.post0
 python-dotenv==1.0.1
 pyunormalize==15.1.0
 referencing==0.35.1
@@ -33,6 +34,7 @@ regex==2024.5.15
 requests==2.32.3
 rlp==4.0.1
 rpds-py==0.19.1
+six==1.16.0
 toolz==0.12.1
 typing_extensions==4.12.2
 urllib3==2.2.2
