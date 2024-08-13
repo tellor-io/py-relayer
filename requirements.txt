@@ -20,7 +20,6 @@ hexbytes==0.3.1
 idna==3.7
 jsonschema==4.23.0
 jsonschema-specifications==2023.12.1
-logging==0.4.9.6
 lru-dict==1.2.0
 multidict==6.0.5
 parsimonious==0.10.0
