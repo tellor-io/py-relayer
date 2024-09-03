@@ -134,6 +134,15 @@ def get_attestation_data_by_snapshot(snapshot) -> (dict, Exception):
     except Exception as e:
         print(f"layer_client: Error getting attestation data by snapshot: {e}")
         return None, e
+    
+def get_current_aggregate_report(query_id) -> (dict, Exception):
+    request = f"{SWAGGER_ENDPOINT}/tellor-io/layer/oracle/get_current_aggregate_report/{query_id}"
+    try:
+        response = requests.get(request)
+        return response.json(), None
+    except Exception as e:
+        print(f"layer_client: Error getting current aggregate report: {e}")
+        return None, e
 
 ## queries
 
@@ -187,6 +196,9 @@ def query_latest_oracle_data(query_id) -> (dict, Exception):
         "snapshot": last_snapshot
     }
     return oracle_proof, None
+
+
+
 
 def get_sufficient_attestation_power(attestations, current_validator_set, threshold) -> bool:
     power_sum = 0

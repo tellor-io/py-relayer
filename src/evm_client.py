@@ -2,18 +2,21 @@ from web3 import Web3, Account
 from web3.types import HexBytes
 import json
 import os
+from eth_abi import encode
 from dotenv import load_dotenv
 
 load_dotenv()
 
 BLOBSTREAM_ADDRESS = os.getenv("BLOBSTREAM_CONTRACT_ADDRESS")
 LAYER_USER_ADDRESS = os.getenv("LAYER_USER_CONTRACT_ADDRESS")
+TOKEN_BRIDGE_ADDRESS = os.getenv("TOKEN_BRIDGE_CONTRACT_ADDRESS")
 PROVIDER_URL = os.getenv("WEB3_PROVIDER_URL")
 PRIVATE_KEY = os.getenv("ETH_PRIVATE_KEY")
 
 web3_instance = None
 blobstream_contract = None
 layer_user_contract = None
+token_bridge_contract = None
 web3_acct = None
 
 def init_web3():
@@ -48,8 +51,14 @@ def setup_contracts():
 
     global layer_user_contract
     layer_user_contract = web3_instance.eth.contract(address=LAYER_USER_ADDRESS, abi=abi)
+
+    global token_bridge_contract
+    with open("abis/TokenBridge.json") as f:
+        abi = json.load(f)["abi"]
+    token_bridge_contract = web3_instance.eth.contract(address=TOKEN_BRIDGE_ADDRESS, abi=abi)
     print("evm_client: Layer user contract: ", layer_user_contract.address)
     print("evm_client: Blobstream contract: ", blobstream_contract.address)
+    print("evm_client: Token bridge contract: ", token_bridge_contract.address)
 
 def get_web3_instance():
     return web3_instance
@@ -152,3 +161,14 @@ def update_oracle_data(update_tx_params) -> (HexBytes, Exception):
     except Exception as e:
         print("evm_client: Error updating oracle data: ", e)
         return None, e
+
+def get_withdraw_claimed_status(withdraw_id: int) -> (bool, Exception):
+    print("evm_client: Getting withdraw claimed status...")
+    print("evm_client: Withdraw id: ", withdraw_id)
+    try:
+        claimed = token_bridge_contract.functions.withdrawClaimed(withdraw_id).call()
+        print("evm_client: Withdraw claimed status: ", claimed)
+        return claimed, None
+    except Exception as e:
+        print("evm_client: Error getting withdraw claimed status: ", e)
+        return False, e
