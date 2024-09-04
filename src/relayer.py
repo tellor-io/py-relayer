@@ -2,6 +2,7 @@ from layer_client import query_validator_set_update, query_latest_oracle_data, g
 from evm_client import init_web3, get_blobstream_validator_timestamp, init_blobstream, update_validator_set, get_current_price_data_timestamp, update_oracle_data
 from transformer import transform_blobstream_init_params, transform_valset_update_params, transform_oracle_update_params
 from email_client import send_email_alert
+from bridge_client import relay_next_withdraw
 import time
 import os
 from dotenv import load_dotenv
@@ -46,9 +47,10 @@ def start_relayer():
             if e:
                 print("relayer: Error updating to latest Layer validator set: ", e)
                 continue
-        e = update_user_oracle_data(QUERY_ID)
+        # e = update_user_oracle_data(QUERY_ID)
+        e = relay_next_withdraw()
         if e:
-            print("relayer: Error updating user oracle data: ", e)
+            print("relayer: Error relaying next withdraw: ", e)
             continue
 
 def blobstream_init() -> Exception:

@@ -78,6 +78,45 @@ def transform_oracle_update_params(oracle_update_params):
     }
     return update_params
 
+def transform_withdraw_tx_params(withdraw_tx_params, withdraw_id):
+    print("transformer: Transforming withdraw tx params...")
+    attestations = withdraw_tx_params["attestations"]["attestations"]
+    attestation_data = withdraw_tx_params["attestation_data"]
+    validator_set = withdraw_tx_params["validator_set"]["bridge_validator_set"]
+    snapshot = withdraw_tx_params["snapshot"]
+    derived_signatures = derive_signatures(attestations, validator_set, snapshot)
+    print("transformer: Derived signatures: ", derived_signatures)
+    withdraw_params = {
+        "oracle_attestation_data": {
+            "queryId": Web3.to_bytes(hexstr=attestation_data["query_id"]),
+            "report": {
+                "value": Web3.to_bytes(hexstr=attestation_data["aggregate_value"]),
+                "timestamp": int(attestation_data["timestamp"]),
+                "aggregatePower": int(attestation_data["aggregate_power"]),
+                "previousTimestamp": int(attestation_data["previous_report_timestamp"]),
+                "nextTimestamp": int(attestation_data["next_report_timestamp"])
+            },
+            "attestationTimestamp": int(attestation_data["attestation_timestamp"])
+        },
+        "current_validator_set": [
+            {
+                "addr": Web3.to_checksum_address(validator["ethereumAddress"]),
+                "power": int(validator["power"])
+            }
+            for validator in validator_set
+        ],
+        "sigs": [
+            {
+                "v": int(sig["v"]),
+                "r": Web3.to_bytes(hexstr=sig["r"]),
+                "s": Web3.to_bytes(hexstr=sig["s"])
+            }
+            for sig in derived_signatures
+        ],
+        "withdraw_id": int(withdraw_id)
+    }
+    return withdraw_params
+
 def derive_signatures(signatures, validator_set, checkpoint):
     derived_signatures = []
     data = Web3.to_bytes(hexstr=checkpoint)

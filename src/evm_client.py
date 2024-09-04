@@ -162,6 +162,30 @@ def update_oracle_data(update_tx_params) -> (HexBytes, Exception):
         print("evm_client: Error updating oracle data: ", e)
         return None, e
 
+def withdraw_from_layer(withdraw_tx_params) -> (HexBytes, Exception):
+    print("evm_client: Withdrawing from layer...")
+    print("evm_client: Withdraw tx params: ", withdraw_tx_params)
+    try:
+        tx = token_bridge_contract.functions.withdrawFromLayer(
+            withdraw_tx_params["oracle_attestation_data"],
+            withdraw_tx_params["current_validator_set"],
+            withdraw_tx_params["sigs"],
+            withdraw_tx_params["deposit_id"]
+        ).build_transaction({
+            'from': web3_acct.address,
+            'nonce': web3_instance.eth.get_transaction_count(web3_acct.address),
+            'gas': 2000000,  
+            'gasPrice': web3_instance.eth.gas_price,
+        })
+        print("evm_client: Tx: ", tx)
+        signed_tx = web3_instance.eth.account.sign_transaction(tx, private_key=PRIVATE_KEY)
+        tx_hash = web3_instance.eth.send_raw_transaction(signed_tx.rawTransaction)
+        print("evm_client: Tx hash: ", tx_hash.hex())
+        return tx_hash, None
+    except Exception as e:
+        print("evm_client: Error withdrawing from layer: ", e)
+        return None, e
+
 def get_withdraw_claimed_status(withdraw_id: int) -> (bool, Exception):
     print("evm_client: Getting withdraw claimed status...")
     print("evm_client: Withdraw id: ", withdraw_id)
