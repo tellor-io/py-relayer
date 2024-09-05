@@ -170,7 +170,7 @@ def withdraw_from_layer(withdraw_tx_params) -> (HexBytes, Exception):
             withdraw_tx_params["oracle_attestation_data"],
             withdraw_tx_params["current_validator_set"],
             withdraw_tx_params["sigs"],
-            withdraw_tx_params["deposit_id"]
+            withdraw_tx_params["withdraw_id"]
         ).build_transaction({
             'from': web3_acct.address,
             'nonce': web3_instance.eth.get_transaction_count(web3_acct.address),

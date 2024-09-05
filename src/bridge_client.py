@@ -9,6 +9,8 @@ highest_withdraw_id = 0
 withdraw_delay = 120 # seconds
 max_attestation_age = 43200 # seconds
 
+# use statuses to try next 10 withdraw ids
+# and to increment "lowest pending withdraw id"
 def relay_next_withdraw() -> (Exception):
     global highest_withdraw_id
     withdraw_id = highest_withdraw_id + 1

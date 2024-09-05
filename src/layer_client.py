@@ -154,6 +154,10 @@ def query_latest_oracle_data(query_id) -> (dict, Exception):
     report, e = get_data_before(query_id, current_time)
     if e:
         return None, e
+    if report is None:
+        return None, Exception("layer_client: No report found")
+    if report.get("aggregate") is None:
+        return None, Exception("layer_client: No aggregate report found")
     snapshots, e = get_snapshots_by_report(query_id, report["timestamp"])
     if e:
         return None, e
