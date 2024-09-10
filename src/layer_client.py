@@ -11,6 +11,19 @@ load_dotenv()
 
 SWAGGER_ENDPOINT = os.getenv("LAYER_SWAGGER_ENDPOINT")
 RPC_ENDPOINT = os.getenv("LAYER_RPC_ENDPOINT")
+MAX_RETRY_COUNT = 10
+
+def get_layer_connection_status() -> (str, Exception):
+    print("layer_client: Getting layer connection status")
+    print("layer_client: swagger endpoint: ", SWAGGER_ENDPOINT)
+    print("layer_client: rpc endpoint: ", RPC_ENDPOINT)
+    request = f"{RPC_ENDPOINT}/status"
+    try:
+        response = requests.get(request)
+        return response.json(), None
+    except Exception as e:
+        print(f"layer_client: Error getting layer connection status: {e}")
+        return None, e
 
 def strip_0x(value):
     if value.startswith("0x"):
@@ -166,8 +179,10 @@ def query_latest_oracle_data(query_id) -> (dict, Exception):
         current_validator_set.get("bridge_validator_set"), 
         threshold
     )
-    if not sufficient_power:
-        retry_sleep_time = 3
+    retry_count = 0
+    while not sufficient_power and retry_count < MAX_RETRY_COUNT:
+        retry_count += 1
+        retry_sleep_time = retry_count ** 2
         print(f"layer_client: Insufficient attestation power, sleeping for {retry_sleep_time} seconds")
         sleep(retry_sleep_time)
         attestations, e = get_attestations_by_snapshot(last_snapshot)
@@ -178,8 +193,8 @@ def query_latest_oracle_data(query_id) -> (dict, Exception):
             current_validator_set.get("bridge_validator_set"), 
             threshold
         )
-        if not sufficient_power:
-            return None, Exception("layer_client: Insufficient attestation power")
+    if not sufficient_power:
+        return None, Exception("layer_client: Insufficient attestation power")
     oracle_proof = {
         "attestations": attestations,
         "attestation_data": attestation_data,

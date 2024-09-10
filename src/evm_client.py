@@ -68,6 +68,16 @@ def get_current_price_data_timestamp():
     timestamp = price_data[1] # timestamp
     return timestamp
 
+def get_price_data_by_index(index):
+    print("evm_client: Getting price data by index...")
+    price_data = layer_user_contract.functions.priceData(index).call()
+    return price_data
+
+def get_value_count():
+    print("evm_client: Getting value count...")
+    value_count = layer_user_contract.functions.getValueCount().call()
+    return value_count
+
 def init_blobstream(init_tx_params):
     print("evm_client: Initializing Blobstream...")
     print("evm_client: Init tx params: ", init_tx_params)
