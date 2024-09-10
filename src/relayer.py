@@ -10,7 +10,7 @@ load_dotenv()
 
 QUERY_ID = os.getenv("QUERY_ID")
 SLEEP_TIME = int(os.getenv("SLEEP_TIME"))
-VALSET_SLEEP_TIME = 90
+VALSET_SLEEP_TIME = 60
 
 def start_relayer():
     print("relayer: Starting relayer...")
