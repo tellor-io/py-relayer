@@ -1,4 +1,4 @@
-from layer_client import query_validator_set_update, query_latest_oracle_data, get_blobstream_init_params, get_layer_latest_validator_timestamp, get_next_validator_set_timestamp, get_layer_chain_status
+from layer_client import query_validator_set_update, query_latest_oracle_data_proof, get_blobstream_init_params, get_layer_latest_validator_timestamp, get_next_validator_set_timestamp, get_layer_chain_status
 from evm_client import init_web3, get_blobstream_validator_timestamp, init_blobstream, update_validator_set, get_current_price_data_timestamp, update_oracle_data
 from transformer import transform_blobstream_init_params, transform_valset_update_params, transform_oracle_update_params
 from email_client import send_email_alert
@@ -88,7 +88,7 @@ def update_to_latest_layer_validator_set(blobstream_validator_timestamp, layer_v
 
 def update_user_oracle_data(query_id) -> Exception:
     print("relayer: Updating oracle data...")
-    oracle_proof, e = query_latest_oracle_data(query_id)
+    oracle_proof, e = query_latest_oracle_data_proof(query_id)
     if e:
         return e
     current_price_data_timestamp = get_current_price_data_timestamp()

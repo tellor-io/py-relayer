@@ -106,8 +106,29 @@ def get_data_before(query_id, timestamp_before) -> (dict, Exception):
     except Exception as e:
         print(f"layer_client: Error getting data before: {e}")
         return None, e
+    
+def get_current_aggregate_report(query_id: str) -> tuple[dict, Exception]:
+    query_id = strip_0x(query_id)
+    request = f"{SWAGGER_ENDPOINT}/tellor-io/layer/oracle/get_current_aggregate_report/{query_id}"
+    try:
+        response = requests.get(request)
+        return response.json(), None
+    except Exception as e:
+        print(f"layer_client: Error getting current aggregate report: {e}")
+        return None, e
+    
+def retrieve_data(query_id: str, timestamp: int) -> tuple[dict, Exception]:
+    # /tellor-io/layer/oracle/retrieve_data/{query_id}/{timestamp}
+    query_id = strip_0x(query_id)
+    request = f"{SWAGGER_ENDPOINT}/tellor-io/layer/oracle/retrieve_data/{query_id}/{timestamp}"
+    try:
+        response = requests.get(request)
+        return response.json(), None
+    except Exception as e:
+        print(f"layer_client: Error retrieving data: {e}")
+        return None, e
 
-def get_snapshots_by_report(query_id, timestamp) -> (dict, Exception):
+def get_snapshots_by_report(query_id: str, timestamp: int) -> tuple[dict, Exception]:
     query_id = strip_0x(query_id)
     request = f"{SWAGGER_ENDPOINT}/layer/bridge/get_snapshots_by_report/{query_id}/{timestamp}"
     try:
@@ -137,7 +158,7 @@ def get_attestation_data_by_snapshot(snapshot) -> (dict, Exception):
 
 ## queries
 
-def query_latest_oracle_data(query_id) -> (dict, Exception):
+def query_latest_oracle_data_proof(query_id) -> (dict, Exception):
     print("layer_client: Querying latest oracle data")
     # subtract 1 second to account for attestation time,
     # TODO: optimize
@@ -187,6 +208,56 @@ def query_latest_oracle_data(query_id) -> (dict, Exception):
         "snapshot": last_snapshot
     }
     return oracle_proof, None
+
+def assemble_oracle_data_proof(query_id: str, timestamp: int) -> tuple[dict, Exception]:
+    print("layer_client: Assembling oracle data proof")
+    snapshots, e = get_snapshots_by_report(query_id, timestamp)
+    if e:
+        return None, e
+    last_snapshot = snapshots["snapshots"][-1]
+    attestations, e = get_attestations_by_snapshot(last_snapshot)
+    if e:
+        return None, e
+    current_validator_set, e = get_current_validator_set()
+    if e:
+        return None, e
+    threshold, e = get_current_power_threshold()
+    if e:
+        return None, e
+    sufficient_power = get_sufficient_attestation_power(
+        attestations.get("attestations"), 
+        current_validator_set.get("bridge_validator_set"), 
+        threshold
+    )
+    retry_count = 0
+    while not sufficient_power and retry_count < 10:
+        sleep_time = 1
+        if retry_count > 5:
+            sleep_time = 2 ** (retry_count - 5)
+        print(f"layer_client: Insufficient attestation power, sleeping for {sleep_time} seconds")
+        sleep(sleep_time)
+        retry_count += 1
+        attestations, e = get_attestations_by_snapshot(last_snapshot)
+        if e:
+            return None, e
+        sufficient_power = get_sufficient_attestation_power(
+            attestations.get("attestations"), 
+            current_validator_set.get("bridge_validator_set"), 
+            threshold
+        )
+    if not sufficient_power:
+        return None, Exception("layer_client: Insufficient attestation power")
+    attestation_data, e = get_attestation_data_by_snapshot(last_snapshot)
+    if e:
+        return None, e
+    oracle_proof = {
+        "attestations": attestations,
+        "attestation_data": attestation_data,
+        "validator_set": current_validator_set,
+        "snapshot": last_snapshot,
+    }
+    return oracle_proof, None
+
 
 def get_sufficient_attestation_power(attestations, current_validator_set, threshold) -> bool:
     power_sum = 0
