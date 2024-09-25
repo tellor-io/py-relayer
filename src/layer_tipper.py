@@ -5,15 +5,20 @@ from raw_key import RawKey
 from terra_sdk.client.lcd.api.tx import CreateTxOptions
 from terra_sdk.core.fee import Fee
 from terra_sdk.core.coin import Coin
-# hardcode inputs
-PRIVATE_KEY = "4f88ba20a4cdcc875f32b15338ee62bc6a7372fe6241d1a489b52864b39fd82c"
-# LAYER_ENDPOINT = "https://tellor-testnet.rpc.nodex.one"
-LAYER_ENDPOINT = "http://localhost:1317"
-CHAIN_ID = "layertest-2"
-QUERY_DATA = "00000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000000953706f745072696365000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000c0000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000800000000000000000000000000000000000000000000000000000000000000003657468000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000037573640000000000000000000000000000000000000000000000000000000000"
-TIP_AMOUNT = "100loya"
+from layer_client import strip_0x
+import os
+from dotenv import load_dotenv
 
-def tip():
+load_dotenv()
+
+PRIVATE_KEY = os.getenv("LAYER_PRIVATE_KEY")
+# LAYER_ENDPOINT = "https://tellor-testnet.rpc.nodex.one"
+LAYER_ENDPOINT = os.getenv("LAYER_SWAGGER_ENDPOINT")
+CHAIN_ID = os.getenv("LAYER_CHAIN_ID")
+QUERY_DATA = strip_0x(os.getenv("QUERY_DATA"))
+TIP_AMOUNT = "500000loya"
+
+def tip() -> tuple[str, Exception]:
     # creat client and wallet
     print("layer_tipper: Creating client and wallet...")
     client = LCDClient(url=LAYER_ENDPOINT, chain_id=CHAIN_ID)
@@ -37,21 +42,19 @@ def tip():
         memo="test tip tx",
         fee=Fee(200000, "500loya"),
     )
-    
     try:
-        print("layer_tipper: Creating unsigned tx...")
-        unsigned_tx = wallet.create_tx(options)
-        print(f"layer_tipper: Unsigned tx: {unsigned_tx}")
-        print("layer_tipper: Creating and signing tx...")
+        print("layer_tipper: Creating and signing tip tx...")
         tx = wallet.create_and_sign_tx(options)
         print("layer_tipper: Submitting tx...")
         tx_response = client.tx.broadcast_sync(tx)
         print("layer_tipper: Tx submitted...")
         print("layer_tipper: Tx response...")
-        print(tx_response)
+        tx_hash = tx_response.txhash
+        print("layer_tipper: Tx hash: ", tx_hash)
+        return tx_hash, None
     except Exception as e:
-        print("layer_tipper: Error submitting tx...")
-        print(e)
+        print(f"layer_tipper: Error submitting tx: {e}")
+        return "", e
 
 def send():
     # creat client and wallet

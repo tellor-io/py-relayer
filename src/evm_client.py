@@ -92,7 +92,7 @@ def init_blobstream(init_tx_params):
         print("evm_client: Signed transaction: ", signed_tx)
 
         # Send the transaction
-        tx_hash = web3_instance.eth.send_raw_transaction(signed_tx.rawTransaction)
+        tx_hash = web3_instance.eth.send_raw_transaction(signed_tx.raw_transaction)
         print("evm_client: Tx hash: ", tx_hash)
         return tx_hash
     except Exception as e:
@@ -123,7 +123,7 @@ def update_validator_set(update_tx_params):
         })
         print("evm_client: Tx: ", tx)
         signed_tx = web3_instance.eth.account.sign_transaction(tx, private_key=PRIVATE_KEY)
-        tx_hash = web3_instance.eth.send_raw_transaction(signed_tx.rawTransaction)
+        tx_hash = web3_instance.eth.send_raw_transaction(signed_tx.raw_transaction)
         print("evm_client: Tx hash: ", tx_hash)
         return tx_hash
     except Exception as e:
@@ -146,7 +146,7 @@ def update_oracle_data(update_tx_params) -> (HexBytes, Exception):
         })
         print("evm_client: Tx: ", tx)
         signed_tx = web3_instance.eth.account.sign_transaction(tx, private_key=PRIVATE_KEY)
-        tx_hash = web3_instance.eth.send_raw_transaction(signed_tx.rawTransaction)
+        tx_hash = web3_instance.eth.send_raw_transaction(signed_tx.raw_transaction)
         print("evm_client: Tx hash: ", tx_hash.hex())
         return tx_hash, None
     except Exception as e:

@@ -17,15 +17,10 @@ def start_relayer():
 
     print("relayer: Initializing web3...")
     init_web3()
-    blobstream_validator_timestamp = get_blobstream_validator_timestamp()
-    print("relayer: Blobstream validator timestamp: ", blobstream_validator_timestamp)
-
-    if blobstream_validator_timestamp == 0:
-        print("relayer: Initializing Blobstream...")
-        e = blobstream_init()
-        if e:
-            print("relayer: Error initializing Blobstream: ", e)
-            return
+    e = initialize_blobstream()
+    if e:
+        print("relayer: Error initializing Blobstream: ", e)
+        return
 
     while True:
         time.sleep(SLEEP_TIME)
@@ -33,19 +28,10 @@ def start_relayer():
         if e:
             print("relayer: Error checking layer chain status: ", e)
             continue
-        layer_validator_timestamp, e = get_layer_latest_validator_timestamp()
+        e = handle_validator_set_update()
         if e:
-            print("relayer: Error getting latest Layer validator timestamp: ", e)
+            print("relayer: Error handling validator set update: ", e)
             continue
-        print("relayer: Layer validator timestamp: ", layer_validator_timestamp)
-        blobstream_validator_timestamp = get_blobstream_validator_timestamp()
-        print("relayer: Blobstream validator timestamp: ", blobstream_validator_timestamp)
-        if int(blobstream_validator_timestamp) < int(layer_validator_timestamp):
-            print("relayer: Updating to latest Layer validator set...")
-            e = update_to_latest_layer_validator_set(blobstream_validator_timestamp, layer_validator_timestamp)
-            if e:
-                print("relayer: Error updating to latest Layer validator set: ", e)
-                continue
         e = update_user_oracle_data(QUERY_ID)
         if e:
             print("relayer: Error updating user oracle data: ", e)
@@ -116,6 +102,41 @@ def check_layer_chain_status() -> Exception:
         e = send_email_alert("Layer chain status alert", message)
         if e:
             return e
+    return None
+
+def initialize_blobstream() -> Exception:
+    blobstream_validator_timestamp = get_blobstream_validator_timestamp()
+    print("relayer: Blobstream validator timestamp: ", blobstream_validator_timestamp)
+
+    if blobstream_validator_timestamp == 0:
+        print("relayer: Initializing Blobstream...")
+        e = blobstream_init()
+        if e:
+            print("relayer: Error initializing Blobstream: ", e)
+            return e
+        time.sleep(VALSET_SLEEP_TIME)
+    print("relayer: Blobstream initialized")
+    
+    e = handle_validator_set_update()
+    if e:
+        return e
+    return None
+
+def handle_validator_set_update() -> Exception:
+    layer_validator_timestamp, e = get_layer_latest_validator_timestamp()
+    if e:
+        print("relayer: Error getting latest Layer validator timestamp: ", e)
+        return e
+    print("relayer: Layer validator timestamp: ", layer_validator_timestamp)
+    blobstream_validator_timestamp = get_blobstream_validator_timestamp()
+    print("relayer: Blobstream validator timestamp: ", blobstream_validator_timestamp)
+    if int(blobstream_validator_timestamp) < int(layer_validator_timestamp):
+        print("relayer: Updating to latest Layer validator set...")
+        e = update_to_latest_layer_validator_set(blobstream_validator_timestamp, layer_validator_timestamp)
+        if e:
+            print("relayer: Error updating to latest Layer validator set: ", e)
+            return e
+
     return None
 
 start_relayer()
