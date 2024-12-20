@@ -199,6 +199,8 @@ def get_next_validator_set_timestamp(given_timestamp) -> (str, Exception):
     given_ts_index, e = get_validator_set_index_by_timestamp(given_timestamp)
     if e:
         return None, e
+    if given_ts_index is None or "index" not in given_ts_index:
+        return None, Exception("layer_client: Invalid timestamp")
     next_ts_index = str(int(given_ts_index.get("index")) + 1)
     next_ts, e = get_validator_timestamp_by_index(next_ts_index)
     if e:
@@ -209,10 +211,14 @@ def get_previous_validator_set_timestamp(given_timestamp) -> (str, Exception):
     given_ts_index, e = get_validator_set_index_by_timestamp(given_timestamp)
     if e:
         return None, e
+    if given_ts_index is None or "index" not in given_ts_index:
+        return None, Exception("layer_client: Invalid timestamp")
     previous_ts_index = str(int(given_ts_index.get("index")) - 1)
     previous_ts, e = get_validator_timestamp_by_index(previous_ts_index)
     if e:
         return None, e
+    if previous_ts is None or "timestamp" not in previous_ts:
+        return None, Exception("layer_client: Invalid timestamp")
     return previous_ts.get("timestamp"), None
 
 def query_validator_set_update(given_timestamp) -> (dict, Exception):
