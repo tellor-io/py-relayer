@@ -13,6 +13,14 @@ def transform_blobstream_init_params(checkpoint_params):
     }
     return init_params
 
+def transform_blobstream_reset_params(checkpoint_params):
+    reset_params = {
+        "power_threshold": int(checkpoint_params.get("power_threshold")),
+        "validator_timestamp": int(checkpoint_params.get("timestamp")),
+        "validator_set_checkpoint": Web3.to_bytes(hexstr=checkpoint_params.get("checkpoint"))
+    }
+    return reset_params
+
 def transform_valset_update_params(valset_update_params):
     print("transformer: Transforming valset update params...")
     derived_signatures = derive_signatures(valset_update_params["valset_sigs"]["signatures"], valset_update_params["previous_valset"]["bridge_validator_set"], valset_update_params["valset_checkpoint"]["checkpoint"])

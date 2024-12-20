@@ -152,3 +152,26 @@ def update_oracle_data(update_tx_params) -> (HexBytes, Exception):
     except Exception as e:
         print("evm_client: Error updating oracle data: ", e)
         return None, e
+
+def reset_blobstream(reset_tx_params):
+    print("evm_client: Resetting Blobstream...")
+    print("evm_client: Reset tx params: ", reset_tx_params)
+    try:
+        tx = blobstream_contract.functions.guardianResetValidatorSet(
+            reset_tx_params["power_threshold"],
+            reset_tx_params["validator_timestamp"],
+            reset_tx_params["validator_set_checkpoint"]
+        ).build_transaction({
+            'from': web3_acct.address,
+            'nonce': web3_instance.eth.get_transaction_count(web3_acct.address),
+            'gas': 300000,
+            'gasPrice': web3_instance.eth.gas_price,
+        })
+        print("evm_client: Tx: ", tx)
+        signed_tx = web3_instance.eth.account.sign_transaction(tx, private_key=PRIVATE_KEY)
+        tx_hash = web3_instance.eth.send_raw_transaction(signed_tx.rawTransaction)
+        print("evm_client: Tx hash: ", tx_hash)
+        return tx_hash
+    except Exception as e:
+        print("evm_client: Error resetting Blobstream: ", e)
+        return None

@@ -244,6 +244,13 @@ def get_blobstream_init_params() -> (dict, Exception):
         return None, e
     return checkpoint_params, None
 
+def get_blobstream_reset_params() -> (dict, Exception):
+    latest_timestamp, e = get_layer_latest_validator_timestamp()
+    checkpoint_params, e = get_validator_checkpoint_params(latest_timestamp)
+    if e:
+        return None, e
+    return checkpoint_params, None
+
 def get_layer_latest_validator_timestamp() -> (str, Exception):
     latest_timestamp, e = get_current_validator_set_timestamp()
     if e:

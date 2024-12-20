@@ -1,6 +1,6 @@
-from layer_client import query_validator_set_update, query_latest_oracle_data, get_blobstream_init_params, get_layer_latest_validator_timestamp, get_next_validator_set_timestamp, get_layer_chain_status
-from evm_client import init_web3, get_blobstream_validator_timestamp, init_blobstream, update_validator_set, get_current_price_data_timestamp, update_oracle_data
-from transformer import transform_blobstream_init_params, transform_valset_update_params, transform_oracle_update_params
+from layer_client import query_validator_set_update, query_latest_oracle_data, get_blobstream_init_params, get_layer_latest_validator_timestamp, get_next_validator_set_timestamp, get_layer_chain_status, get_blobstream_reset_params
+from evm_client import init_web3, get_blobstream_validator_timestamp, init_blobstream, update_validator_set, get_current_price_data_timestamp, update_oracle_data, reset_blobstream
+from transformer import transform_blobstream_init_params, transform_valset_update_params, transform_oracle_update_params, transform_blobstream_reset_params
 from email_client import send_email_alert
 import time
 import os
@@ -25,6 +25,15 @@ def start_relayer():
         e = blobstream_init()
         if e:
             print("relayer: Error initializing Blobstream: ", e)
+            return
+    
+    # check if blobstream validator timestamp is stale (> 21 days old)
+    current_timestamp = time.time()
+    if current_timestamp * 1000 - blobstream_validator_timestamp > 21 * 24 * 60 * 60 * 1000:
+        print("relayer: Blobstream validator timestamp is stale. Resetting if you are the guardian.")
+        e = blobstream_reset()
+        if e:
+            print("relayer: Error resetting Blobstream: ", e)
             return
 
     while True:
@@ -61,6 +70,18 @@ def blobstream_init() -> Exception:
     print("relayer: Init tx params: ", init_tx_params)
     init_tx = init_blobstream(init_tx_params)
     print("relayer: Init tx: ", init_tx)
+    return None
+
+def blobstream_reset() -> Exception:
+    print("relayer: Resetting Blobstream...")
+    checkpoint_params, e = get_blobstream_reset_params()
+    if e:
+        return e
+    print("relayer: Checkpoint params: ", checkpoint_params)
+    reset_tx_params = transform_blobstream_reset_params(checkpoint_params)
+    print("relayer: Reset tx params: ", reset_tx_params)
+    reset_tx = reset_blobstream(reset_tx_params)
+    print("relayer: Reset tx: ", reset_tx)
     return None
 
 def update_to_latest_layer_validator_set(blobstream_validator_timestamp, layer_validator_timestamp) -> Exception:
