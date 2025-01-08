@@ -137,7 +137,9 @@ def update_oracle_data(update_tx_params) -> (HexBytes, Exception):
         tx = layer_user_contract.functions.updateOracleData(
             update_tx_params["oracle_attestation_data"],
             update_tx_params["current_validator_set"],
-            update_tx_params["sigs"]
+            update_tx_params["sigs"],
+            0,
+            0
         ).build_transaction({
             'from': web3_acct.address,
             'nonce': web3_instance.eth.get_transaction_count(web3_acct.address),
