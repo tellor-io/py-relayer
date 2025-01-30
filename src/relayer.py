@@ -80,8 +80,7 @@ def blobstream_reset() -> Exception:
     print("relayer: Checkpoint params: ", checkpoint_params)
     reset_tx_params = transform_blobstream_reset_params(checkpoint_params)
     print("relayer: Reset tx params: ", reset_tx_params)
-    reset_tx = reset_blobstream(reset_tx_params)
-    print("relayer: Reset tx: ", reset_tx)
+    reset_blobstream(reset_tx_params)
     return None
 
 def update_to_latest_layer_validator_set(blobstream_validator_timestamp, layer_validator_timestamp) -> Exception:
