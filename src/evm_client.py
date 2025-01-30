@@ -6,10 +6,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-BLOBSTREAM_ADDRESS = os.getenv("BLOBSTREAM_CONTRACT_ADDRESS")
-LAYER_USER_ADDRESS = os.getenv("LAYER_USER_CONTRACT_ADDRESS")
-PROVIDER_URL = os.getenv("WEB3_PROVIDER_URL")
-PRIVATE_KEY = os.getenv("ETH_PRIVATE_KEY")
+BLOBSTREAM_ADDRESS = None
+LAYER_USER_ADDRESS = None
+PROVIDER_URL = None
+PRIVATE_KEY = None
 
 web3_instance = None
 blobstream_contract = None
@@ -17,6 +17,14 @@ layer_user_contract = None
 web3_acct = None
 
 def init_web3():
+    global BLOBSTREAM_ADDRESS
+    BLOBSTREAM_ADDRESS = os.getenv("BLOBSTREAM_CONTRACT_ADDRESS")
+    global LAYER_USER_ADDRESS
+    LAYER_USER_ADDRESS = os.getenv("LAYER_USER_CONTRACT_ADDRESS")
+    global PROVIDER_URL
+    PROVIDER_URL = os.getenv("WEB3_PROVIDER_URL")
+    global PRIVATE_KEY
+    PRIVATE_KEY = os.getenv("ETH_PRIVATE_KEY")
     connect_web3()
     setup_contracts()
 
@@ -93,7 +101,7 @@ def init_blobstream(init_tx_params):
 
         # Send the transaction
         tx_hash = web3_instance.eth.send_raw_transaction(signed_tx.rawTransaction)
-        print("evm_client: Tx hash: ", tx_hash)
+        print("evm_client: Tx hash: ", tx_hash.hex())
         return tx_hash
     except Exception as e:
         print("evm_client: Error initializing Blobstream: ", e)
@@ -124,7 +132,7 @@ def update_validator_set(update_tx_params):
         print("evm_client: Tx: ", tx)
         signed_tx = web3_instance.eth.account.sign_transaction(tx, private_key=PRIVATE_KEY)
         tx_hash = web3_instance.eth.send_raw_transaction(signed_tx.rawTransaction)
-        print("evm_client: Tx hash: ", tx_hash)
+        print("evm_client: Tx hash: ", tx_hash.hex())
         return tx_hash
     except Exception as e:
         print("evm_client: Error updating validator set: ", e)

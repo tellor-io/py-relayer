@@ -1,20 +1,19 @@
-from layer_client import query_validator_set_update, query_latest_oracle_data, get_blobstream_init_params, get_layer_latest_validator_timestamp, get_next_validator_set_timestamp, get_layer_chain_status, get_blobstream_reset_params
-from evm_client import init_web3, get_blobstream_validator_timestamp, init_blobstream, update_validator_set, get_current_price_data_timestamp, update_oracle_data, reset_blobstream
-from transformer import transform_blobstream_init_params, transform_valset_update_params, transform_oracle_update_params, transform_blobstream_reset_params
-from email_client import send_email_alert
+from src.layer_client import query_validator_set_update, query_latest_oracle_data, get_blobstream_init_params, get_layer_latest_validator_timestamp, get_next_validator_set_timestamp, get_layer_chain_status, get_blobstream_reset_params
+from src.evm_client import init_web3, get_blobstream_validator_timestamp, init_blobstream, update_validator_set, get_current_price_data_timestamp, update_oracle_data, reset_blobstream
+from src.transformer import transform_blobstream_init_params, transform_valset_update_params, transform_oracle_update_params, transform_blobstream_reset_params
+from src.email_client import send_email_alert
 import time
 import os
-from dotenv import load_dotenv
 
-load_dotenv()
-
-QUERY_ID = os.getenv("QUERY_ID")
-SLEEP_TIME = int(os.getenv("SLEEP_TIME"))
 VALSET_SLEEP_TIME = 60
 
 def start_relayer():
+    # Get environment variables at runtime
+    query_id = os.getenv("QUERY_ID")
+    sleep_time = int(os.getenv("SLEEP_TIME", "600"))  # Default to 600 if not set
+    
     print("relayer: Starting relayer...")
-
+    print("sleep time: ", sleep_time)
     print("relayer: Initializing web3...")
     init_web3()
     blobstream_validator_timestamp = get_blobstream_validator_timestamp()
@@ -37,7 +36,7 @@ def start_relayer():
             return
 
     while True:
-        time.sleep(SLEEP_TIME)
+        time.sleep(sleep_time)
         e = check_layer_chain_status()
         if e:
             print("relayer: Error checking layer chain status: ", e)
@@ -55,7 +54,7 @@ def start_relayer():
             if e:
                 print("relayer: Error updating to latest Layer validator set: ", e)
                 continue
-        e = update_user_oracle_data(QUERY_ID)
+        e = update_user_oracle_data(query_id)  # Pass query_id as parameter
         if e:
             print("relayer: Error updating user oracle data: ", e)
             continue
@@ -138,4 +137,4 @@ def check_layer_chain_status() -> Exception:
             return e
     return None
 
-start_relayer()
+# start_relayer()
