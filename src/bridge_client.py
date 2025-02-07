@@ -1,7 +1,7 @@
 from web3 import Web3
 from eth_abi import encode
 from src.layer_client import query_latest_oracle_data
-from src.evm_client import get_withdraw_claimed_status, withdraw_from_layer, init_web3
+from src.evm_client import EVMClient
 from src.transformer import transform_withdraw_tx_params
 import time
 import os
@@ -32,17 +32,23 @@ def relay_next_withdraw() -> (Exception):
 # 	- attestation checkpoint __latest__
 def relay_withdraw(withdraw_id) -> (int, Exception):
     print("bridge_client: Relaying withdraw: ", withdraw_id)
-    init_web3()
+    evm = EVMClient()
+    evm.init_web3()
+    evm.setup_blobstream_contract()
+    evm.setup_token_bridge_contract()
+    
     withdraw_query_id = get_withdraw_query_id(withdraw_id)
     # check if withdrawal id exists
     oracle_proof, e = query_latest_oracle_data(withdraw_query_id)
     if e:
         return None, e
+    
     # report old enough
     report_ts = int(oracle_proof["attestation_data"]["timestamp"]) / 1000
     if time.time() - report_ts < withdraw_delay:
         print("bridge_client: Report too new")
         return None, e
+    
     # attestation recent enough
     attest_ts = int(oracle_proof["attestation_data"]["attestation_timestamp"]) / 1000
     if time.time() - attest_ts > max_attestation_age:
@@ -50,20 +56,18 @@ def relay_withdraw(withdraw_id) -> (int, Exception):
         return None, e
     
     # check if withdraw is claimed
-    claimed, e = get_withdraw_claimed_status(withdraw_id)
-    if e:
-        return None, e
-    if claimed is True:
+    claimed = evm.get_withdraw_claimed_status(withdraw_id)
+    if claimed:
         print("bridge_client: Withdraw already claimed")
-        return 1, e
+        return 1, None
     
     oracle_update_tx_params = transform_withdraw_tx_params(oracle_proof, withdraw_id)
     print("bridge_client: Oracle update tx params: ", oracle_update_tx_params)
-    tx_hash, e = withdraw_from_layer(oracle_update_tx_params)
-    if e:
-        return None, e
+    tx_hash = evm.withdraw_from_layer(oracle_update_tx_params)
+    if not tx_hash:
+        return None, Exception("Failed to withdraw from layer")
     print("bridge_client: Oracle data updated: ", tx_hash.hex())
-    return 2, e
+    return 2, None
 
 def get_list_of_pending_withdraws():
     next_withdraw_id = highest_withdraw_id + 1

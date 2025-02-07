@@ -2,8 +2,8 @@ import click
 from dotenv import load_dotenv
 import os
 from src.relayer import start_relayer, blobstream_init, blobstream_reset, update_user_oracle_data
-from src.evm_client import init_web3
 from src.bridge_client import relay_withdraw
+from src.evm_client import EVMClient
 
 @click.group()
 def cli():
@@ -20,29 +20,25 @@ def cli():
 @click.option('--web3-provider', envvar='WEB3_PROVIDER_URL', help='Web3 provider URL')
 @click.option('--layer-swagger', envvar='LAYER_SWAGGER_ENDPOINT', help='Layer swagger endpoint')
 @click.option('--layer-rpc', envvar='LAYER_RPC_ENDPOINT', help='Layer RPC endpoint')
-def relay(query_id, sleep_time, eth_private_key, blobstream_address, layer_user_address, 
-         web3_provider, layer_swagger, layer_rpc):
+def relay(query_id, sleep_time, eth_private_key, web3_provider, layer_swagger, layer_rpc, blobstream_address, layer_user_address):
     """Start the relayer process"""
-    # Only set environment variables for values that were actually provided
-    # (either via CLI or environment)
-    if query_id:
-        os.environ['QUERY_ID'] = query_id
-    if sleep_time:
-        os.environ['SLEEP_TIME'] = str(sleep_time)
     if eth_private_key:
         os.environ['ETH_PRIVATE_KEY'] = eth_private_key
-    if blobstream_address:
-        os.environ['BLOBSTREAM_CONTRACT_ADDRESS'] = blobstream_address
-    if layer_user_address:
-        os.environ['LAYER_USER_CONTRACT_ADDRESS'] = layer_user_address
     if web3_provider:
         os.environ['WEB3_PROVIDER_URL'] = web3_provider
     if layer_swagger:
         os.environ['LAYER_SWAGGER_ENDPOINT'] = layer_swagger
     if layer_rpc:
         os.environ['LAYER_RPC_ENDPOINT'] = layer_rpc
-    
-    from src.relayer import start_relayer
+    if blobstream_address:
+        os.environ['BLOBSTREAM_CONTRACT_ADDRESS'] = blobstream_address
+    if layer_user_address:
+        os.environ['LAYER_USER_CONTRACT_ADDRESS'] = layer_user_address
+    if query_id:
+        os.environ['QUERY_ID'] = query_id
+    if sleep_time:
+        os.environ['SLEEP_TIME'] = str(sleep_time)
+
     start_relayer()
 
 @cli.command()
@@ -116,10 +112,16 @@ def relay_bridge(withdraw_id, eth_private_key, web3_provider, layer_swagger):
     if layer_swagger:
         os.environ['LAYER_SWAGGER_ENDPOINT'] = layer_swagger
 
-    error = relay_withdraw(withdraw_id)
+    status, error = relay_withdraw(withdraw_id)
     if error:
         click.echo(f"Error relaying withdraw: {error}", err=True)
         exit(1)
+    if status == 1:
+        click.echo("Withdraw already claimed")
+    elif status == 2:
+        click.echo("Withdraw successfully relayed")
+    else:
+        click.echo("Withdraw not ready to be relayed")
 
 if __name__ == '__main__':
     cli() 
