@@ -3,6 +3,7 @@ from dotenv import load_dotenv
 import os
 from src.relayer import start_relayer, blobstream_init, blobstream_reset, update_user_oracle_data
 from src.evm_client import init_web3
+from src.bridge_client import relay_withdraw
 
 @click.group()
 def cli():
@@ -99,6 +100,25 @@ def update(query_id, eth_private_key, blobstream_address, layer_user_address, we
     error = update_user_oracle_data(query_id)
     if error:
         click.echo(f"Error updating oracle data: {error}", err=True)
+        exit(1)
+
+@cli.command()
+@click.option('--withdraw-id', required=True, type=int, help='Withdraw ID to relay')
+@click.option('--eth-private-key', envvar='ETH_PRIVATE_KEY', help='Ethereum private key')
+@click.option('--web3-provider', envvar='WEB3_PROVIDER_URL', help='Web3 provider URL')
+@click.option('--layer-swagger', envvar='LAYER_SWAGGER_ENDPOINT', help='Layer swagger endpoint')
+def relay_bridge(withdraw_id, eth_private_key, web3_provider, layer_swagger):
+    """Relay a specific withdraw from Layer to EVM chain"""
+    if eth_private_key:
+        os.environ['ETH_PRIVATE_KEY'] = eth_private_key
+    if web3_provider:
+        os.environ['WEB3_PROVIDER_URL'] = web3_provider
+    if layer_swagger:
+        os.environ['LAYER_SWAGGER_ENDPOINT'] = layer_swagger
+
+    error = relay_withdraw(withdraw_id)
+    if error:
+        click.echo(f"Error relaying withdraw: {error}", err=True)
         exit(1)
 
 if __name__ == '__main__':
