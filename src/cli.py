@@ -103,7 +103,9 @@ def update(query_id, eth_private_key, blobstream_address, layer_user_address, we
 @click.option('--eth-private-key', envvar='ETH_PRIVATE_KEY', help='Ethereum private key')
 @click.option('--web3-provider', envvar='WEB3_PROVIDER_URL', help='Web3 provider URL')
 @click.option('--layer-swagger', envvar='LAYER_SWAGGER_ENDPOINT', help='Layer swagger endpoint')
-def relay_bridge(withdraw_id, eth_private_key, web3_provider, layer_swagger):
+@click.option('--blobstream-address', envvar='BLOBSTREAM_CONTRACT_ADDRESS', help='Blobstream contract address')
+@click.option('--token-bridge-address', envvar='TOKEN_BRIDGE_CONTRACT_ADDRESS', help='Token Bridge contract address')
+def relay_bridge(withdraw_id, eth_private_key, web3_provider, layer_swagger, blobstream_address, token_bridge_address):
     """Relay a specific withdraw from Layer to EVM chain"""
     if eth_private_key:
         os.environ['ETH_PRIVATE_KEY'] = eth_private_key
@@ -111,6 +113,10 @@ def relay_bridge(withdraw_id, eth_private_key, web3_provider, layer_swagger):
         os.environ['WEB3_PROVIDER_URL'] = web3_provider
     if layer_swagger:
         os.environ['LAYER_SWAGGER_ENDPOINT'] = layer_swagger
+    if blobstream_address:
+        os.environ['BLOBSTREAM_CONTRACT_ADDRESS'] = blobstream_address
+    if token_bridge_address:
+        os.environ['TOKEN_BRIDGE_CONTRACT_ADDRESS'] = token_bridge_address
 
     status, error = relay_withdraw(withdraw_id)
     if error:
