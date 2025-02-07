@@ -15,6 +15,7 @@ git clone https://github.com/tellor-io/py-relayer.git
 ```bash
 cd py-relayer
 ```
+
 3. Create a virtual environment:
 ```bash
 python3 -m venv venv
@@ -26,7 +27,12 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-5. Copy the .env.example file to .env and set the appropriate environment variables:
+5. Install the package:
+```bash
+pip install -e .
+```
+
+6. Copy the .env.example file to .env and set the appropriate environment variables:
 ```bash
 cp .env.example .env
 ```
@@ -44,8 +50,34 @@ sudo apt install build-essential python3-dev
 
 After installing these dependencies, proceed with the setup instructions above.
 
-## Run the Relayer
+## Usage
 
+The relayer provides several commands through its CLI:
+
+### Start Relaying
 ```bash
-python3 src/relayer.py
+relayer relay --query-id 0x83a7f3d48786ac2667503a61e8c415438ed2922eb86a2906e4ee66d9a2ce4992 --sleep-time 600
+```
+
+### Initialize Blobstream
+```bash
+relayer init
+```
+
+### Reset Blobstream
+```bash
+relayer reset
+```
+
+### Update Oracle Data
+```bash
+relayer update --query-id 0x83a7f3d48786ac2667503a61e8c415438ed2922eb86a2906e4ee66d9a2ce4992
+```
+
+For security reasons, we recommend storing sensitive information (like your Ethereum private key) in the .env file rather than passing them as command line arguments. Other configuration options can be passed either through the CLI or set in your .env file.
+
+To see all available options for each command:
+```bash
+relayer --help
+relayer relay --help
 ```

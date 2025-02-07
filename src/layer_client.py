@@ -2,15 +2,7 @@
 import requests
 import time
 import os
-from dotenv import load_dotenv
-from time import sleep
-from datetime import datetime
 from dateutil import parser
-
-load_dotenv()
-
-SWAGGER_ENDPOINT = os.getenv("LAYER_SWAGGER_ENDPOINT")
-RPC_ENDPOINT = os.getenv("LAYER_RPC_ENDPOINT")
 
 def strip_0x(value):
     if value.startswith("0x"):
@@ -18,7 +10,8 @@ def strip_0x(value):
     return value
 
 def get_layer_chain_status() -> (str, Exception):
-    request = f"{RPC_ENDPOINT}/status"
+    rpc_endpoint = os.getenv("LAYER_RPC_ENDPOINT")
+    request = f"{rpc_endpoint}/status"
     try:
         response = requests.get(request)
         if response.status_code != 200:
@@ -43,7 +36,8 @@ def get_layer_chain_status() -> (str, Exception):
 
 # validator set functions
 def get_validator_timestamp_by_index(index) -> (dict, Exception):
-    request = f"{SWAGGER_ENDPOINT}/layer/bridge/get_validator_timestamp_by_index/{index}"
+    swagger_endpoint = os.getenv("LAYER_SWAGGER_ENDPOINT")
+    request = f"{swagger_endpoint}/layer/bridge/get_validator_timestamp_by_index/{index}"
     try:
         response = requests.get(request)
         return response.json(), None
@@ -52,7 +46,8 @@ def get_validator_timestamp_by_index(index) -> (dict, Exception):
         return None, e
 
 def get_validator_checkpoint_params(timestamp) -> (dict, Exception):
-    request = f"{SWAGGER_ENDPOINT}/layer/bridge/get_validator_checkpoint_params/{timestamp}"
+    swagger_endpoint = os.getenv("LAYER_SWAGGER_ENDPOINT")
+    request = f"{swagger_endpoint}/layer/bridge/get_validator_checkpoint_params/{timestamp}"
     try:
         response = requests.get(request)
         return response.json(), None
@@ -61,7 +56,8 @@ def get_validator_checkpoint_params(timestamp) -> (dict, Exception):
         return None, e
 
 def get_valset_by_timestamp(timestamp) -> (dict, Exception):
-    request = f"{SWAGGER_ENDPOINT}/layer/bridge/get_valset_by_timestamp/{timestamp}"
+    swagger_endpoint = os.getenv("LAYER_SWAGGER_ENDPOINT")
+    request = f"{swagger_endpoint}/layer/bridge/get_valset_by_timestamp/{timestamp}"
     try:
         response = requests.get(request)
         return response.json(), None
@@ -70,7 +66,8 @@ def get_valset_by_timestamp(timestamp) -> (dict, Exception):
         return None, e
 
 def get_valset_sigs(timestamp) -> (dict, Exception):
-    request = f"{SWAGGER_ENDPOINT}/layer/bridge/get_valset_sigs/{timestamp}"
+    swagger_endpoint = os.getenv("LAYER_SWAGGER_ENDPOINT")
+    request = f"{swagger_endpoint}/layer/bridge/get_valset_sigs/{timestamp}"
     try:
         response = requests.get(request)
         return response.json(), None
@@ -79,7 +76,8 @@ def get_valset_sigs(timestamp) -> (dict, Exception):
         return None, e
 
 def get_current_validator_set_timestamp() -> (str, Exception):
-    request = f"{SWAGGER_ENDPOINT}/layer/bridge/get_current_validator_set_timestamp"
+    swagger_endpoint = os.getenv("LAYER_SWAGGER_ENDPOINT")
+    request = f"{swagger_endpoint}/layer/bridge/get_current_validator_set_timestamp"
     try:
         response = requests.get(request)
         return response.json(), None
@@ -88,7 +86,8 @@ def get_current_validator_set_timestamp() -> (str, Exception):
         return None, e
 
 def get_validator_set_index_by_timestamp(timestamp) -> (dict, Exception):
-    request = f"{SWAGGER_ENDPOINT}/layer/bridge/get_validator_set_index_by_timestamp/{timestamp}"
+    swagger_endpoint = os.getenv("LAYER_SWAGGER_ENDPOINT")
+    request = f"{swagger_endpoint}/layer/bridge/get_validator_set_index_by_timestamp/{timestamp}"
     try:
         response = requests.get(request)
         return response.json(), None
@@ -99,7 +98,8 @@ def get_validator_set_index_by_timestamp(timestamp) -> (dict, Exception):
 # oracle data functions 
 def get_data_before(query_id, timestamp_before) -> (dict, Exception):
     query_id = strip_0x(query_id)
-    request = f"{SWAGGER_ENDPOINT}/tellor-io/layer/oracle/get_data_before/{query_id}/{timestamp_before}"
+    swagger_endpoint = os.getenv("LAYER_SWAGGER_ENDPOINT")
+    request = f"{swagger_endpoint}/tellor-io/layer/oracle/get_data_before/{query_id}/{timestamp_before}"
     try:
         response = requests.get(request)
         return response.json(), None
@@ -109,7 +109,8 @@ def get_data_before(query_id, timestamp_before) -> (dict, Exception):
 
 def get_snapshots_by_report(query_id, timestamp) -> (dict, Exception):
     query_id = strip_0x(query_id)
-    request = f"{SWAGGER_ENDPOINT}/layer/bridge/get_snapshots_by_report/{query_id}/{timestamp}"
+    swagger_endpoint = os.getenv("LAYER_SWAGGER_ENDPOINT")
+    request = f"{swagger_endpoint}/layer/bridge/get_snapshots_by_report/{query_id}/{timestamp}"
     try:
         response = requests.get(request)
         return response.json(), None
@@ -118,7 +119,8 @@ def get_snapshots_by_report(query_id, timestamp) -> (dict, Exception):
         return None, e
 
 def get_attestations_by_snapshot(snapshot) -> (dict, Exception):
-    request = f"{SWAGGER_ENDPOINT}/layer/bridge/get_attestations_by_snapshot/{snapshot}"
+    swagger_endpoint = os.getenv("LAYER_SWAGGER_ENDPOINT")
+    request = f"{swagger_endpoint}/layer/bridge/get_attestations_by_snapshot/{snapshot}"
     try:
         response = requests.get(request)
         return response.json(), None
@@ -127,7 +129,8 @@ def get_attestations_by_snapshot(snapshot) -> (dict, Exception):
         return None, e
 
 def get_attestation_data_by_snapshot(snapshot) -> (dict, Exception):
-    request = f"{SWAGGER_ENDPOINT}/layer/bridge/get_attestation_data_by_snapshot/{snapshot}"
+    swagger_endpoint = os.getenv("LAYER_SWAGGER_ENDPOINT")
+    request = f"{swagger_endpoint}/layer/bridge/get_attestation_data_by_snapshot/{snapshot}"
     try:
         response = requests.get(request)
         return response.json(), None
@@ -169,7 +172,7 @@ def query_latest_oracle_data(query_id) -> (dict, Exception):
     if not sufficient_power:
         retry_sleep_time = 3
         print(f"layer_client: Insufficient attestation power, sleeping for {retry_sleep_time} seconds")
-        sleep(retry_sleep_time)
+        time.sleep(retry_sleep_time)
         attestations, e = get_attestations_by_snapshot(last_snapshot)
         if e:
             return None, e
