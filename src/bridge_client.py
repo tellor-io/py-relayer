@@ -96,4 +96,4 @@ def get_withdraw_query_id(withdraw_id: int) -> str:
     query_id = Web3.keccak(query_data)
     return query_id.hex()
 
-relay_withdraw(withdraw_id_to_relay)
+# relay_withdraw(withdraw_id_to_relay)
