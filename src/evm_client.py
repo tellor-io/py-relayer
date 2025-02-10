@@ -147,7 +147,7 @@ class EVMClient:
                 'gasPrice': self.web3_instance.eth.gas_price,
             })
             print("evm_client: Tx: ", tx)
-            signed_tx = self.web3_instance.eth.account.sign_transaction(tx, private_key=self.web3_acct.private_key)
+            signed_tx = self.web3_instance.eth.account.sign_transaction(tx, self.web3_acct.key)
             tx_hash = self.web3_instance.eth.send_raw_transaction(signed_tx.rawTransaction)
             print("evm_client: Tx hash: ", tx_hash.hex())
             return tx_hash, None
