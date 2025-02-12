@@ -4,6 +4,7 @@ import os
 from src.relayer import start_relayer, blobstream_init, blobstream_reset, update_user_oracle_data
 from src.bridge_client import relay_withdraw
 from src.evm_client import EVMClient
+from src.tipper import start_tipper
 
 @click.group()
 def cli():
@@ -128,6 +129,25 @@ def relay_bridge(withdraw_id, eth_private_key, web3_provider, layer_swagger, blo
         click.echo("Withdraw successfully relayed")
     else:
         click.echo("Withdraw not ready to be relayed")
+
+@cli.command()
+@click.option('--query-id', envvar='QUERY_ID', required=True, help='Query ID to tip')
+@click.option('--query-data', envvar='QUERY_DATA', required=True, help='Query data to tip')
+@click.option('--sleep-time', envvar='SLEEP_TIME', type=int, default=120, help='Sleep time between tips in seconds')
+@click.option('--layer-address', envvar='LAYER_ADDRESS', required=True, help='Layer address')
+@click.option('--layer-rpc', envvar='LAYER_RPC_ENDPOINT', required=True, help='Layer RPC endpoint')
+@click.option('--iterations', type=int, default=50, help='Number of iterations to run')
+def tip(query_id, query_data, sleep_time, layer_address, layer_rpc, iterations):
+    """Start the tipper process"""
+    # Set environment variables
+    os.environ['QUERY_ID'] = query_id
+    os.environ['QUERY_DATA'] = query_data
+    os.environ['SLEEP_TIME'] = str(sleep_time)
+    os.environ['LAYER_ADDRESS'] = layer_address
+    os.environ['LAYER_RPC_ENDPOINT'] = layer_rpc
+    os.environ['N_ITERATIONS'] = str(iterations)
+
+    start_tipper()
 
 if __name__ == '__main__':
     cli() 

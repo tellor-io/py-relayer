@@ -106,6 +106,17 @@ def get_data_before(query_id, timestamp_before) -> (dict, Exception):
     except Exception as e:
         print(f"layer_client: Error getting data before: {e}")
         return None, e
+    
+def get_current_aggregate_report(query_id) -> (dict, Exception):
+    query_id = strip_0x(query_id)
+    swagger_endpoint = os.getenv("LAYER_SWAGGER_ENDPOINT")
+    request = f"{swagger_endpoint}/tellor-io/layer/oracle/get_current_aggregate_report/{query_id}"
+    try:
+        response = requests.get(request)
+        return response.json(), None
+    except Exception as e:
+        print(f"layer_client: Error getting current aggregate report: {e}")
+        return None, e
 
 def get_snapshots_by_report(query_id, timestamp) -> (dict, Exception):
     query_id = strip_0x(query_id)
