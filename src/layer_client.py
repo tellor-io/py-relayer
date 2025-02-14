@@ -9,6 +9,20 @@ def strip_0x(value):
         return value[2:]
     return value
 
+def get_layer_connection_status() -> (str, Exception):
+    swagger_endpoint = os.getenv("LAYER_SWAGGER_ENDPOINT")
+    rpc_endpoint = os.getenv("LAYER_RPC_ENDPOINT")
+    print("layer_client: Getting layer connection status")
+    print("layer_client: swagger endpoint: ", swagger_endpoint)
+    print("layer_client: rpc endpoint: ", rpc_endpoint)
+    request = f"{rpc_endpoint}/status"
+    try:
+        response = requests.get(request)
+        return response.json(), None
+    except Exception as e:
+        print(f"layer_client: Error getting layer connection status: {e}")
+        return None, e
+
 def get_layer_chain_status() -> (str, Exception):
     rpc_endpoint = os.getenv("LAYER_RPC_ENDPOINT")
     request = f"{rpc_endpoint}/status"

@@ -5,6 +5,7 @@ from src.relayer import start_relayer, blobstream_init, blobstream_reset, update
 from src.bridge_client import relay_withdraw
 from src.evm_client import EVMClient
 from src.tipper import start_tipper
+from src.layer_scraper import scrape_layer
 
 @click.group()
 def cli():
@@ -155,6 +156,21 @@ def tip(query_id, query_data, sleep_time, layer_address, layer_rpc, iterations):
     os.environ['N_ITERATIONS'] = str(iterations)
 
     start_tipper()
+
+@cli.command()
+@click.option('--query-id', envvar='QUERY_ID', required=True, help='Query ID to scrape')
+@click.option('--scrape-count', type=int, default=1000, help='Number of data points to scrape')
+@click.option('--output-file', envvar='LAYER_DATA_CSV', default="data/layer_data.csv", help='Output CSV file path')
+def scrape(query_id, scrape_count, output_file):
+    """Scrape historical data from Layer chain"""
+    # Set environment variables
+    os.environ['QUERY_ID'] = query_id
+    os.environ['SCRAPE_COUNT'] = str(scrape_count)
+    os.environ['LAYER_DATA_CSV'] = output_file
+
+    print("scrape: Scraping layer data to ", output_file)
+
+    scrape_layer(query_id, output_file, scrape_count)
 
 if __name__ == '__main__':
     cli() 
