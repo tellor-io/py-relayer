@@ -54,8 +54,10 @@ def init(eth_private_key, blobstream_address, web3_provider, layer_swagger):
     os.environ['WEB3_PROVIDER_URL'] = web3_provider
     os.environ['LAYER_SWAGGER_ENDPOINT'] = layer_swagger
     
-    init_web3()
-    error = blobstream_init()
+    evm = EVMClient()
+    evm.init_web3()
+    evm.setup_blobstream_contract()
+    error = blobstream_init(evm)
     if error:
         click.echo(f"Error initializing Blobstream: {error}", err=True)
         exit(1)
@@ -72,8 +74,10 @@ def reset(eth_private_key, blobstream_address, web3_provider, layer_swagger):
     os.environ['WEB3_PROVIDER_URL'] = web3_provider
     os.environ['LAYER_SWAGGER_ENDPOINT'] = layer_swagger
     
-    init_web3()
-    error = blobstream_reset()
+    evm = EVMClient()
+    evm.init_web3()
+    evm.setup_blobstream_contract()
+    error = blobstream_reset(evm)
     if error:
         click.echo(f"Error resetting Blobstream: {error}", err=True)
         exit(1)
@@ -93,8 +97,11 @@ def update(query_id, eth_private_key, blobstream_address, layer_user_address, we
     os.environ['WEB3_PROVIDER_URL'] = web3_provider
     os.environ['LAYER_SWAGGER_ENDPOINT'] = layer_swagger
     
-    init_web3()
-    error = update_user_oracle_data(query_id)
+    evm = EVMClient()
+    evm.init_web3()
+    evm.setup_blobstream_contract()
+    evm.setup_layer_user_contract()
+    error = update_user_oracle_data(evm, query_id)
     if error:
         click.echo(f"Error updating oracle data: {error}", err=True)
         exit(1)

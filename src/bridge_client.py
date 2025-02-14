@@ -38,10 +38,13 @@ def relay_withdraw(withdraw_id) -> (int, Exception):
     evm.setup_token_bridge_contract()
     
     withdraw_query_id = get_withdraw_query_id(withdraw_id)
+    print("bridge_client: Withdraw query id: ", withdraw_query_id)
     # check if withdrawal id exists
     oracle_proof, e = query_latest_oracle_data(withdraw_query_id)
     if e:
         return None, e
+    
+    print("bridge_client: Oracle proof: ", oracle_proof)
     
     # report old enough
     report_ts = int(oracle_proof["attestation_data"]["timestamp"]) / 1000
