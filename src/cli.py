@@ -6,6 +6,7 @@ from src.bridge_client import relay_withdraw
 from src.evm_client import EVMClient
 from src.tipper import start_tipper
 from src.layer_scraper import scrape_layer
+from src.report import generate_power_report
 
 @click.group()
 def cli():
@@ -171,6 +172,19 @@ def scrape(query_id, scrape_count, output_file):
     print("scrape: Scraping layer data to ", output_file)
 
     scrape_layer(query_id, output_file, scrape_count)
+
+@cli.command()
+@click.option('--input-file', envvar='LAYER_DATA_CSV', default="data/layer_data.csv", help='Input CSV file path')
+@click.option('--terminal-plot', is_flag=True, help='Show plot in terminal')
+def report(input_file, terminal_plot):
+    """Generate reports from scraped data"""
+    if not os.path.exists(input_file):
+        click.echo(f"Error: Input file {input_file} does not exist")
+        return
+    
+    print(f"Generating reports from {input_file}")
+    stats = generate_power_report(input_file, show_terminal_plot=terminal_plot)
+    print("\nReport generated in reports/power_vs_height.png")
 
 if __name__ == '__main__':
     cli() 
