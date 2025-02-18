@@ -138,4 +138,19 @@ def check_layer_chain_status() -> Exception:
             return e
     return None
 
-# start_relayer()
+def handle_validator_set_update(evm) -> Exception:
+    layer_validator_timestamp, e = get_layer_latest_validator_timestamp()
+    if e:
+        print("relayer: Error getting latest Layer validator timestamp: ", e)
+        return e
+    print("relayer: Layer validator timestamp: ", layer_validator_timestamp)
+    blobstream_validator_timestamp = evm.get_blobstream_validator_timestamp()
+    print("relayer: Blobstream validator timestamp: ", blobstream_validator_timestamp)
+    if int(blobstream_validator_timestamp) < int(layer_validator_timestamp):
+        print("relayer: Updating to latest Layer validator set...")
+        e = update_to_latest_layer_validator_set(blobstream_validator_timestamp, layer_validator_timestamp)
+        if e:
+            print("relayer: Error updating to latest Layer validator set: ", e)
+            return e
+
+    return None
