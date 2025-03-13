@@ -82,7 +82,7 @@ def init_blobstream(init_tx_params):
             'from': web3_acct.address,
             'nonce': web3_instance.eth.get_transaction_count(web3_acct.address),
             'gas': 300000,
-            'gasPrice': web3_instance.eth.gas_price,
+            'gasPrice': int(web3_instance.eth.gas_price * 1.25),
         })
 
         print("evm_client: Tx: ", tx)
@@ -119,7 +119,7 @@ def update_validator_set(update_tx_params):
             'from': web3_acct.address,
             'nonce': web3_instance.eth.get_transaction_count(web3_acct.address),
             'gas': 2000000,  
-            'gasPrice': web3_instance.eth.gas_price,
+            'gasPrice': int(web3_instance.eth.gas_price * 1.25),
         })
         print("evm_client: Tx: ", tx)
         signed_tx = web3_instance.eth.account.sign_transaction(tx, private_key=PRIVATE_KEY)
@@ -144,7 +144,7 @@ def update_oracle_data(update_tx_params) -> (HexBytes, Exception):
             'from': web3_acct.address,
             'nonce': web3_instance.eth.get_transaction_count(web3_acct.address),
             'gas': 2000000,  
-            'gasPrice': web3_instance.eth.gas_price,
+            'gasPrice': int(web3_instance.eth.gas_price * 2),
         })
         print("evm_client: Tx: ", tx)
         signed_tx = web3_instance.eth.account.sign_transaction(tx, private_key=PRIVATE_KEY)
@@ -167,7 +167,7 @@ def reset_blobstream(reset_tx_params):
             'from': web3_acct.address,
             'nonce': web3_instance.eth.get_transaction_count(web3_acct.address),
             'gas': 300000,
-            'gasPrice': web3_instance.eth.gas_price,
+            'gasPrice': int(web3_instance.eth.gas_price * 1.25),
         })
         print("evm_client: Tx: ", tx)
         signed_tx = web3_instance.eth.account.sign_transaction(tx, private_key=PRIVATE_KEY)
@@ -190,7 +190,7 @@ def reset_blobstream_testnet(reset_tx_params):
             'from': web3_acct.address,
             'nonce': web3_instance.eth.get_transaction_count(web3_acct.address),
             'gas': 300000,
-            'gasPrice': web3_instance.eth.gas_price,
+            'gasPrice': int(web3_instance.eth.gas_price * 2),
         })
         print("evm_client: Tx: ", tx)
         signed_tx = web3_instance.eth.account.sign_transaction(tx, private_key=PRIVATE_KEY)
