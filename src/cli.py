@@ -20,11 +20,16 @@ def cli():
 @click.option('--eth-private-key', envvar='ETH_PRIVATE_KEY', help='Ethereum private key')
 @click.option('--blobstream-address', envvar='BLOBSTREAM_CONTRACT_ADDRESS', help='Blobstream contract address')
 @click.option('--layer-user-address', envvar='LAYER_USER_CONTRACT_ADDRESS', help='Layer user contract address')
+@click.option('--layer-test-user-address', envvar='LAYER_TEST_USER_CONTRACT_ADDRESS', help='Layer test user contract address')
 @click.option('--web3-provider', envvar='WEB3_PROVIDER_URL', help='Web3 provider URL')
 @click.option('--layer-swagger', envvar='LAYER_SWAGGER_ENDPOINT', help='Layer swagger endpoint')
 @click.option('--layer-rpc', envvar='LAYER_RPC_ENDPOINT', help='Layer RPC endpoint')
-def relay(query_id, sleep_time, eth_private_key, web3_provider, layer_swagger, layer_rpc, blobstream_address, layer_user_address):
+@click.option('--contract-type', type=click.Choice(['SimpleLayerUser', 'TestPriceFeedUser']), 
+              default='SimpleLayerUser', help='Type of contract to use for relaying')
+def relay(query_id, sleep_time, eth_private_key, web3_provider, layer_swagger, layer_rpc, 
+          blobstream_address, layer_user_address, layer_test_user_address, contract_type):
     """Start the relayer process"""
+    # Set environment variables
     if eth_private_key:
         os.environ['ETH_PRIVATE_KEY'] = eth_private_key
     if web3_provider:
@@ -37,11 +42,15 @@ def relay(query_id, sleep_time, eth_private_key, web3_provider, layer_swagger, l
         os.environ['BLOBSTREAM_CONTRACT_ADDRESS'] = blobstream_address
     if layer_user_address:
         os.environ['LAYER_USER_CONTRACT_ADDRESS'] = layer_user_address
+    if layer_test_user_address:
+        os.environ['LAYER_TEST_USER_CONTRACT_ADDRESS'] = layer_test_user_address
     if query_id:
         os.environ['QUERY_ID'] = query_id
     if sleep_time:
         os.environ['SLEEP_TIME'] = str(sleep_time)
-
+    
+    os.environ['CONTRACT_TYPE'] = contract_type
+    
     start_relayer()
 
 @cli.command()
@@ -85,28 +94,16 @@ def reset(eth_private_key, blobstream_address, web3_provider, layer_swagger):
         exit(1)
 
 @cli.command()
-@click.option('--query-id', required=True, help='Query ID to update')
-@click.option('--eth-private-key', envvar='ETH_PRIVATE_KEY', required=True, help='Ethereum private key')
-@click.option('--blobstream-address', envvar='BLOBSTREAM_CONTRACT_ADDRESS', required=True, help='Blobstream contract address')
-@click.option('--layer-user-address', envvar='LAYER_USER_CONTRACT_ADDRESS', required=True, help='Layer user contract address')
-@click.option('--web3-provider', envvar='WEB3_PROVIDER_URL', required=True, help='Web3 provider URL')
-@click.option('--layer-swagger', envvar='LAYER_SWAGGER_ENDPOINT', required=True, help='Layer swagger endpoint')
-def update(query_id, eth_private_key, blobstream_address, layer_user_address, web3_provider, layer_swagger):
+@click.option('--query-id', envvar='QUERY_ID', required=True, help='Query ID to update')
+@click.option('--contract-type', type=click.Choice(['SimpleLayerUser', 'TestPriceFeedUser']), 
+              default='SimpleLayerUser', help='Type of contract to use')
+def update(query_id, contract_type):
     """Update oracle data for a specific query ID"""
-    os.environ['ETH_PRIVATE_KEY'] = eth_private_key
-    os.environ['BLOBSTREAM_CONTRACT_ADDRESS'] = blobstream_address
-    os.environ['LAYER_USER_CONTRACT_ADDRESS'] = layer_user_address
-    os.environ['WEB3_PROVIDER_URL'] = web3_provider
-    os.environ['LAYER_SWAGGER_ENDPOINT'] = layer_swagger
-    
-    evm = EVMClient()
-    evm.init_web3()
-    evm.setup_blobstream_contract()
-    evm.setup_layer_user_contract()
-    error = update_user_oracle_data(evm, query_id)
+    tx_hash, error = update_user_oracle_data(query_id, contract_type)
     if error:
         click.echo(f"Error updating oracle data: {error}", err=True)
         exit(1)
+    click.echo(f"Oracle data updated. Transaction hash: {tx_hash.hex()}")
 
 @cli.command()
 @click.option('--withdraw-id', required=True, type=int, help='Withdraw ID to relay')
