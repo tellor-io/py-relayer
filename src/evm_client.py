@@ -3,6 +3,8 @@ from web3.types import HexBytes
 import json
 import os
 from dotenv import load_dotenv
+import time
+from src.contract_adapters import get_contract_adapter
 
 load_dotenv()
 
@@ -13,6 +15,7 @@ class EVMClient:
         self.blobstream_contract = None
         self.layer_user_contract = None
         self.token_bridge_contract = None
+        self.layer_test_user_contract = None
 
     def init_web3(self):
         provider_url = os.getenv("WEB3_PROVIDER_URL")
@@ -51,6 +54,13 @@ class EVMClient:
         self.token_bridge_contract = self.web3_instance.eth.contract(address=token_bridge_address, abi=abi)
         print("evm_client: Token bridge contract: ", self.token_bridge_contract.address)
 
+    def setup_layer_test_user_contract(self):
+        layer_test_user_address = os.getenv("LAYER_TEST_USER_CONTRACT_ADDRESS")
+        with open("abis/TestPriceFeedUser.json") as f:
+            abi = json.load(f)["abi"]
+        self.layer_test_user_contract = self.web3_instance.eth.contract(address=layer_test_user_address, abi=abi)
+        print("evm_client: Layer test user contract: ", self.layer_test_user_contract.address)
+
     def get_web3_instance(self):
         return self.web3_instance
 
@@ -82,7 +92,7 @@ class EVMClient:
                 'from': self.web3_acct.address,
                 'nonce': self.web3_instance.eth.get_transaction_count(self.web3_acct.address),
                 'gas': 300000,
-                'gasPrice': self.web3_instance.eth.gas_price,
+                'gasPrice': int(self.web3_instance.eth.gas_price * 1.25),
             })
 
             print("evm_client: Tx: ", tx)
@@ -119,7 +129,7 @@ class EVMClient:
                 'from': self.web3_acct.address,
                 'nonce': self.web3_instance.eth.get_transaction_count(self.web3_acct.address),
                 'gas': 2000000,  
-                'gasPrice': self.web3_instance.eth.gas_price,
+                'gasPrice': int(self.web3_instance.eth.gas_price * 1.25),
             })
             print("evm_client: Tx: ", tx)
             signed_tx = self.web3_instance.eth.account.sign_transaction(tx, private_key=self.web3_acct.key)
@@ -130,30 +140,57 @@ class EVMClient:
             print("evm_client: Error updating validator set: ", e)
             return None
 
-    def update_oracle_data(self, update_tx_params) -> (HexBytes, Exception):
-        print("evm_client: Updating oracle data...")
-        print("evm_client: Update tx params: ", update_tx_params)
+    def update_oracle_data(self, oracle_update_params, contract_type="SimpleLayerUser", user_data=None):
+        """
+        Update oracle data using the appropriate contract adapter
+        
+        Args:
+            oracle_update_params: The oracle data parameters
+            contract_type: The type of contract to use (SimpleLayerUser, TestPriceFeedUser, etc.)
+            user_data: Additional user-specific data needed by the adapter
+        """
+        print(f"evm_client: Updating oracle data using {contract_type} contract...")
+        
+        # Get the appropriate contract based on type
+        if contract_type == "SimpleLayerUser":
+            if not self.layer_user_contract:
+                self.setup_layer_user_contract()
+            contract = self.layer_user_contract
+        elif contract_type == "TestPriceFeedUser":
+            if not self.layer_test_user_contract:
+                self.setup_layer_test_user_contract()
+            contract = self.layer_test_user_contract
+        else:
+            raise ValueError(f"Unsupported contract type: {contract_type}")
+        
+        # Get the appropriate adapter
+        adapter = get_contract_adapter(contract_type)
+        if not adapter:
+            raise ValueError(f"No adapter found for contract type: {contract_type}")
+        
+        # Prepare parameters and build transaction
+        if user_data is None:
+            user_data = {"begin_relay_timestamp": int(time.time())}
+        
+        params = adapter.prepare_update_params(oracle_update_params, user_data)
+        
         try:
-            tx = self.layer_user_contract.functions.updateOracleData(
-                update_tx_params["oracle_attestation_data"],
-                update_tx_params["current_validator_set"],
-                update_tx_params["sigs"],
-                0,
-                0
-            ).build_transaction({
+            # Build and send transaction
+            contract_function = adapter.update_oracle_data(contract, params)
+            tx = contract_function.build_transaction({
                 'from': self.web3_acct.address,
                 'nonce': self.web3_instance.eth.get_transaction_count(self.web3_acct.address),
-                'gas': 2000000,  
-                'gasPrice': self.web3_instance.eth.gas_price,
+                'gas': 1000000,
+                'gasPrice': int(self.web3_instance.eth.gas_price * 1.25)
             })
-            print("evm_client: Tx: ", tx)
-            signed_tx = self.web3_instance.eth.account.sign_transaction(tx, self.web3_acct.key)
+            
+            signed_tx = self.web3_instance.eth.account.sign_transaction(tx, private_key=self.web3_acct.key)
             tx_hash = self.web3_instance.eth.send_raw_transaction(signed_tx.rawTransaction)
-            print("evm_client: Tx hash: ", tx_hash.hex())
-            return tx_hash, None
+            print(f"evm_client: Oracle data update tx hash: {tx_hash.hex()}")
+            return tx_hash
         except Exception as e:
-            print("evm_client: Error updating oracle data: ", e)
-            return None, e
+            print(f"evm_client: Error updating oracle data: {e}")
+            return None
 
     def reset_blobstream(self, reset_tx_params):
         print("evm_client: Resetting Blobstream...")
@@ -167,7 +204,7 @@ class EVMClient:
                 'from': self.web3_acct.address,
                 'nonce': self.web3_instance.eth.get_transaction_count(self.web3_acct.address),
                 'gas': 300000,
-                'gasPrice': self.web3_instance.eth.gas_price,
+                'gasPrice': int(self.web3_instance.eth.gas_price * 1.25),
             })
             print("evm_client: Tx: ", tx)
             signed_tx = self.web3_instance.eth.account.sign_transaction(tx, private_key=self.web3_acct.key)
@@ -190,7 +227,7 @@ class EVMClient:
                 'from': self.web3_acct.address,
                 'nonce': self.web3_instance.eth.get_transaction_count(self.web3_acct.address),
                 'gas': 300000,
-                'gasPrice': self.web3_instance.eth.gas_price,
+                'gasPrice': int(self.web3_instance.eth.gas_price * 1.25),
             })
             print("evm_client: Tx: ", tx)
             signed_tx = self.web3_instance.eth.account.sign_transaction(tx, private_key=self.web3_acct.key)
@@ -212,7 +249,7 @@ class EVMClient:
             'from': self.web3_acct.address,
             'nonce': self.web3_instance.eth.get_transaction_count(self.web3_acct.address),
             'gas': 500000,
-            'gasPrice': self.web3_instance.eth.gas_price
+            'gasPrice': int(self.web3_instance.eth.gas_price * 1.25)
         })
         signed_tx = self.web3_instance.eth.account.sign_transaction(tx, self.web3_acct.key)
         tx_hash = self.web3_instance.eth.send_raw_transaction(signed_tx.rawTransaction)

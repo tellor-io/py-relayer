@@ -34,16 +34,19 @@ def generate_power_report(csv_file="data/layer_data.csv", show_terminal_plot=Fal
         
         # Plot with customizations
         plt_term.plot(df['height'], df['reporter_power'], 
-                    #  point_marker="dot",  # Use dots for data points
-                    #  line_marker="·",     # Use smaller line markers
-                     color="blue")        # Set line color
+                    #  point_marker=" ",     # No point markers
+                    #  line_marker="┈",      # Thinner dotted line
+                     color="blue")         # Set line color
+        # plt_term.scatter(df['height'], df['reporter_power'], color="red")
         
         # Customize appearance
         plt_term.title("Aggregate Report Power")
         plt_term.xlabel("Block Height")
         plt_term.ylabel("Power")
-        plt_term.grid(True)              # Add grid
-        plt_term.theme("dark")           # Use dark theme
+        plt_term.grid(False)              # Remove grid for cleaner look
+        plt_term.theme("dark")            # Use dark theme
+        plt_term.canvas_color("black")    # Set canvas background
+        plt_term.ticks_color("bright_yellow") # Make axis ticks more visible
         plt_term.show()
     
     # Print statistics
@@ -52,7 +55,8 @@ def generate_power_report(csv_file="data/layer_data.csv", show_terminal_plot=Fal
         'median': df['reporter_power'].median(),
         'std_dev': df['reporter_power'].std(),
         'min': df['reporter_power'].min(),
-        'max': df['reporter_power'].max()
+        'max': df['reporter_power'].max(),
+        'report_count': len(df)
     }
     
     print("\nAggregate Power Statistics:")
