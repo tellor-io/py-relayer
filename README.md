@@ -61,6 +61,16 @@ The relayer provides several commands through its CLI:
 relayer relay --layer-test-user-address 0x39C93320776D7D9F75798fEF42C72433b718726d --blobstream-address 0xc7670AeD260Ce55830D0766Eb4E5A04bE56979d3 --contract-type TestPriceFeedUser --sleep-time 900
 ```
 
+### Update Oracle Data Once
+```bash
+relayer update --query-id 0x83a7f3d48786ac2667503a61e8c415438ed2922eb86a2906e4ee66d9a2ce4992
+```
+
+### Relay Token Bridge Withdraw
+```bash
+relayer relay-bridge --blobstream-address 0xa73Efa04476B45E5bBAa68A59f7Ee2A21e14FDD4 --token-bridge-address 0x6ac02F3887B358591b8B2D22CfB1F36Fa5843867 --withdraw-id 8
+```
+
 ### Initialize Blobstream
 ```bash
 relayer init
@@ -71,10 +81,7 @@ relayer init
 relayer reset
 ```
 
-### Update Oracle Data Once
-```bash
-relayer update --query-id 0x83a7f3d48786ac2667503a61e8c415438ed2922eb86a2906e4ee66d9a2ce4992
-```
+
 
 
 To see all available options for each command:
