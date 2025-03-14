@@ -92,7 +92,7 @@ class EVMClient:
                 'from': self.web3_acct.address,
                 'nonce': self.web3_instance.eth.get_transaction_count(self.web3_acct.address),
                 'gas': 300000,
-                'gasPrice': self.web3_instance.eth.gas_price,
+                'gasPrice': int(self.web3_instance.eth.gas_price * 1.25),
             })
 
             print("evm_client: Tx: ", tx)
@@ -129,7 +129,7 @@ class EVMClient:
                 'from': self.web3_acct.address,
                 'nonce': self.web3_instance.eth.get_transaction_count(self.web3_acct.address),
                 'gas': 2000000,  
-                'gasPrice': self.web3_instance.eth.gas_price,
+                'gasPrice': int(self.web3_instance.eth.gas_price * 1.25),
             })
             print("evm_client: Tx: ", tx)
             signed_tx = self.web3_instance.eth.account.sign_transaction(tx, private_key=self.web3_acct.key)
@@ -181,7 +181,7 @@ class EVMClient:
                 'from': self.web3_acct.address,
                 'nonce': self.web3_instance.eth.get_transaction_count(self.web3_acct.address),
                 'gas': 1000000,
-                'gasPrice': self.web3_instance.eth.gas_price
+                'gasPrice': int(self.web3_instance.eth.gas_price * 1.25)
             })
             
             signed_tx = self.web3_instance.eth.account.sign_transaction(tx, private_key=self.web3_acct.key)
@@ -204,7 +204,7 @@ class EVMClient:
                 'from': self.web3_acct.address,
                 'nonce': self.web3_instance.eth.get_transaction_count(self.web3_acct.address),
                 'gas': 300000,
-                'gasPrice': self.web3_instance.eth.gas_price,
+                'gasPrice': int(self.web3_instance.eth.gas_price * 1.25),
             })
             print("evm_client: Tx: ", tx)
             signed_tx = self.web3_instance.eth.account.sign_transaction(tx, private_key=self.web3_acct.key)
@@ -227,7 +227,7 @@ class EVMClient:
                 'from': self.web3_acct.address,
                 'nonce': self.web3_instance.eth.get_transaction_count(self.web3_acct.address),
                 'gas': 300000,
-                'gasPrice': self.web3_instance.eth.gas_price,
+                'gasPrice': int(self.web3_instance.eth.gas_price * 1.25),
             })
             print("evm_client: Tx: ", tx)
             signed_tx = self.web3_instance.eth.account.sign_transaction(tx, private_key=self.web3_acct.key)
@@ -249,7 +249,7 @@ class EVMClient:
             'from': self.web3_acct.address,
             'nonce': self.web3_instance.eth.get_transaction_count(self.web3_acct.address),
             'gas': 500000,
-            'gasPrice': self.web3_instance.eth.gas_price
+            'gasPrice': int(self.web3_instance.eth.gas_price * 1.25)
         })
         signed_tx = self.web3_instance.eth.account.sign_transaction(tx, self.web3_acct.key)
         tx_hash = self.web3_instance.eth.send_raw_transaction(signed_tx.rawTransaction)

@@ -55,7 +55,8 @@ def generate_power_report(csv_file="data/layer_data.csv", show_terminal_plot=Fal
         'median': df['reporter_power'].median(),
         'std_dev': df['reporter_power'].std(),
         'min': df['reporter_power'].min(),
-        'max': df['reporter_power'].max()
+        'max': df['reporter_power'].max(),
+        'report_count': len(df)
     }
     
     print("\nAggregate Power Statistics:")
