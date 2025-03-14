@@ -39,6 +39,8 @@ cp .env.example .env
 
 The "email" section of the .env file is optional. If you want to receive emails when layer is down, input your gmail username and password. We recommend using an [app password](https://support.google.com/accounts/answer/185833?hl=en) for your gmail account.
 
+Other than the email section, all .env variables can alternatively be set through the CLI. We recommend setting your ethereum private key in the .env file for security reasons. For convenience, you should set any parameters which tend to remain constant across runs in the .env file. CLI arguments will override .env variables.
+
 ### Additional Requirements for Ubuntu
 
 If you are running the relayer on ubuntu, you may need to install additional tools:
@@ -56,7 +58,7 @@ The relayer provides several commands through its CLI:
 
 ### Start Relaying
 ```bash
-relayer relay --query-id 0x83a7f3d48786ac2667503a61e8c415438ed2922eb86a2906e4ee66d9a2ce4992 --sleep-time 600
+relayer relay --layer-test-user-address 0x39C93320776D7D9F75798fEF42C72433b718726d --blobstream-address 0xc7670AeD260Ce55830D0766Eb4E5A04bE56979d3 --contract-type TestPriceFeedUser --sleep-time 900
 ```
 
 ### Initialize Blobstream
@@ -69,12 +71,11 @@ relayer init
 relayer reset
 ```
 
-### Update Oracle Data
+### Update Oracle Data Once
 ```bash
 relayer update --query-id 0x83a7f3d48786ac2667503a61e8c415438ed2922eb86a2906e4ee66d9a2ce4992
 ```
 
-For security reasons, we recommend storing sensitive information (like your Ethereum private key) in the .env file rather than passing them as command line arguments. Other configuration options can be passed either through the CLI or set in your .env file.
 
 To see all available options for each command:
 ```bash
