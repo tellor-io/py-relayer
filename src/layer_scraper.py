@@ -1,7 +1,9 @@
-from src.layer_client import get_data_before, get_layer_connection_status
+from src.layer_client import get_data_before, get_layer_connection_status, get_current_power_threshold
 import os
 from dotenv import load_dotenv
 import csv
+import json
+import time
 
 load_dotenv()
 
@@ -11,6 +13,28 @@ def scrape_layer(query_id, output_file, scrape_count):
         print(f"layer_scraper: Error getting layer connection status: {err}")
         return
     print(f"layer_scraper: Layer connection status: {status}")
+    
+    # Get current power threshold
+    power_threshold, err = get_current_power_threshold()
+    if err:
+        print(f"layer_scraper: Error getting power threshold: {err}")
+        power_threshold = None
+    else:
+        print(f"layer_scraper: Power threshold: {power_threshold}")
+    
+    # Save metadata
+    metadata_file = output_file.replace('.csv', '_metadata.json')
+    metadata = {
+        "query_id": query_id,
+        "power_threshold": power_threshold,
+        "scrape_date": time.strftime("%Y-%m-%d %H:%M:%S")
+    }
+    
+    with open(metadata_file, 'w') as f:
+        json.dump(metadata, f, indent=2)
+    
+    print(f"layer_scraper: Saved metadata to {metadata_file}")
+    
     scrape_layer_data(query_id, output_file, scrape_count)
 
 def scrape_layer_data(query_id, output_file, scrape_count):

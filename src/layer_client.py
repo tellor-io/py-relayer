@@ -196,16 +196,22 @@ def query_latest_oracle_data(query_id) -> (dict, Exception):
     )
     if not sufficient_power:
         retry_sleep_time = 3
-        print(f"layer_client: Insufficient attestation power, sleeping for {retry_sleep_time} seconds")
-        time.sleep(retry_sleep_time)
-        attestations, e = get_attestations_by_snapshot(last_snapshot)
-        if e:
-            return None, e
-        sufficient_power = get_sufficient_attestation_power(
-            attestations.get("attestations"), 
-            current_validator_set.get("bridge_validator_set"), 
-            threshold
-        )
+        retry_count = 0
+        while retry_count < 3:
+            print(f"layer_client: Insufficient attestation power, sleeping for {retry_sleep_time} seconds")
+            time.sleep(retry_sleep_time)
+            attestations, e = get_attestations_by_snapshot(last_snapshot)
+            if e:
+                return None, e
+            retry_count += 1
+            sufficient_power = get_sufficient_attestation_power(
+                attestations.get("attestations"), 
+                current_validator_set.get("bridge_validator_set"), 
+                threshold
+            )
+            if sufficient_power:
+                break
+            retry_sleep_time = int(retry_sleep_time * 1.5)
         if not sufficient_power:
             return None, Exception("layer_client: Insufficient attestation power")
     oracle_proof = {

@@ -48,6 +48,16 @@ class TestPriceFeedUserAdapter(ContractAdapter):
     """Adapter for TestPriceFeedUser contract"""
     
     def prepare_update_params(self, oracle_data, user_data=None):
+        """
+        Transform oracle data into TestPriceFeedUser contract parameters
+        
+        Args:
+            oracle_data: The oracle data from the Layer chain
+            user_data: Additional user-specific data
+        
+        Returns:
+            dict: The parameters for the updateOracleData2 function
+        """
         # Extract standard parameters
         attestation_data = oracle_data.get("oracle_attestation_data")
         current_validator_set = oracle_data.get("current_validator_set")
@@ -64,6 +74,23 @@ class TestPriceFeedUserAdapter(ContractAdapter):
         }
     
     def update_oracle_data(self, contract, params):
+        """
+        Call the updateOracleData2 function on the TestPriceFeedUser contract
+        
+        Args:
+            contract: The contract instance
+            params: The parameters for the function
+        
+        Returns:
+            ContractFunction: The contract function to call
+        """
+        # Print parameters for debugging
+        print(f"TestPriceFeedUserAdapter: Calling updateOracleData2 with params:")
+        print(f"  attestation_data: {type(params['attestation_data'])}")
+        print(f"  current_validator_set: {type(params['current_validator_set'])}")
+        print(f"  signatures: {type(params['signatures'])}")
+        print(f"  init_timestamp: {params['init_timestamp']}")
+        
         return contract.functions.updateOracleData2(
             params["attestation_data"],
             params["current_validator_set"],

@@ -148,7 +148,12 @@ class EVMClient:
             oracle_update_params: The oracle data parameters
             contract_type: The type of contract to use (SimpleLayerUser, TestPriceFeedUser, etc.)
             user_data: Additional user-specific data needed by the adapter
+        
+        Returns:
+            tuple: (tx_hash, error)
         """
+        from src.contract_adapters import get_contract_adapter
+        
         print(f"evm_client: Updating oracle data using {contract_type} contract...")
         
         # Get the appropriate contract based on type
@@ -161,20 +166,20 @@ class EVMClient:
                 self.setup_layer_test_user_contract()
             contract = self.layer_test_user_contract
         else:
-            raise ValueError(f"Unsupported contract type: {contract_type}")
+            return None, f"Unsupported contract type: {contract_type}"
         
         # Get the appropriate adapter
         adapter = get_contract_adapter(contract_type)
         if not adapter:
-            raise ValueError(f"No adapter found for contract type: {contract_type}")
+            return None, f"No adapter found for contract type: {contract_type}"
         
         # Prepare parameters and build transaction
         if user_data is None:
             user_data = {"begin_relay_timestamp": int(time.time())}
         
-        params = adapter.prepare_update_params(oracle_update_params, user_data)
-        
         try:
+            params = adapter.prepare_update_params(oracle_update_params, user_data)
+            
             # Build and send transaction
             contract_function = adapter.update_oracle_data(contract, params)
             tx = contract_function.build_transaction({
@@ -187,10 +192,10 @@ class EVMClient:
             signed_tx = self.web3_instance.eth.account.sign_transaction(tx, private_key=self.web3_acct.key)
             tx_hash = self.web3_instance.eth.send_raw_transaction(signed_tx.rawTransaction)
             print(f"evm_client: Oracle data update tx hash: {tx_hash.hex()}")
-            return tx_hash
+            return tx_hash, None
         except Exception as e:
             print(f"evm_client: Error updating oracle data: {e}")
-            return None
+            return None, str(e)
 
     def reset_blobstream(self, reset_tx_params):
         print("evm_client: Resetting Blobstream...")
