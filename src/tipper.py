@@ -1,31 +1,50 @@
 from src.layer_client import query_latest_oracle_data, strip_0x, get_current_aggregate_report
 from src.evm_client import EVMClient
 from src.transformer import transform_oracle_update_params
-from src.relayer import handle_validator_set_update
+from src.relayer import handle_validator_set_update, get_oracle_data
+from src.contract_adapters import get_contract_adapter
 import time
 import os
 from dotenv import load_dotenv
 import subprocess
 
-load_dotenv()
+# load_dotenv()
 
-QUERY_ID = os.getenv("QUERY_ID")
-QUERY_DATA = os.getenv("QUERY_DATA")
-SLEEP_TIME = int(os.getenv("SLEEP_TIME"))
-LAYER_ADDRESS = os.getenv("LAYER_ADDRESS")
-LAYER_RPC_ENDPOINT = os.getenv("LAYER_RPC_ENDPOINT")
-N_ITERATIONS = 50
-ITERATION_SLEEP_TIME = 120 # seconds between iterations
+# QUERY_ID = os.getenv("QUERY_ID")
+# QUERY_DATA = os.getenv("QUERY_DATA")
+# SLEEP_TIME = int(os.getenv("SLEEP_TIME"))
+# LAYER_ADDRESS = os.getenv("LAYER_ADDRESS")
+# LAYER_RPC_ENDPOINT = os.getenv("LAYER_RPC_ENDPOINT")
+# CONTRACT_TYPE = os.getenv("CONTRACT_TYPE", "SimpleLayerUser")
+# N_ITERATIONS = 50
+# ITERATION_SLEEP_TIME = 120 # seconds between iterations
 
 def start_tipper():
-    print("tipper: Starting tipper...")
+    QUERY_ID = os.getenv("QUERY_ID")
+    QUERY_DATA = os.getenv("QUERY_DATA")
+    LAYER_ADDRESS = os.getenv("LAYER_ADDRESS")
+    LAYER_RPC_ENDPOINT = os.getenv("LAYER_RPC_ENDPOINT")
+    CONTRACT_TYPE = os.getenv("CONTRACT_TYPE", "SimpleLayerUser")
+    N_ITERATIONS = 50
+    ITERATION_SLEEP_TIME = int(os.getenv("SLEEP_TIME", 3600)) # seconds between iterations
+
+    print(f"tipper: Starting tipper for contract type {CONTRACT_TYPE}...")
     
     # Initialize EVM client
     evm = EVMClient()
     evm.init_web3()
     evm.setup_blobstream_contract()
-    evm.setup_layer_user_contract()
-    print("tipper: Initialized EVM client")
+    
+    # Setup the appropriate contract based on type
+    if CONTRACT_TYPE == "SimpleLayerUser":
+        evm.setup_layer_user_contract()
+    elif CONTRACT_TYPE == "TestPriceFeedUser":
+        evm.setup_layer_test_user_contract()
+    else:
+        print(f"tipper: Unsupported contract type: {CONTRACT_TYPE}")
+        return
+    
+    print(f"tipper: Initialized EVM client with {CONTRACT_TYPE} contract")
 
     for i in range(N_ITERATIONS):
         e = handle_validator_set_update(evm)
@@ -45,7 +64,7 @@ def start_tipper():
         previous_report_timestamp = int(previous_report["timestamp"])
         print("tipper: start time: ", start_time)
 
-        e = tip(QUERY_DATA)
+        e = tip(QUERY_DATA, LAYER_ADDRESS, LAYER_RPC_ENDPOINT)
         if e:
             print("tipper: Error tipping: ", e)
             print("tipper: Sleeping for ", ITERATION_SLEEP_TIME, " seconds")
@@ -65,22 +84,38 @@ def start_tipper():
             report_timestamp = int(report["timestamp"])
             print("tipper: Report timestamp: ", report_timestamp)
         
-        oracle_proof, e = query_latest_oracle_data(QUERY_ID)
+        # Get oracle data
+        oracle_data, e = get_oracle_data(QUERY_ID)
         if e:
             print("tipper: Error getting oracle data: ", e)
             print("tipper: Sleeping for ", ITERATION_SLEEP_TIME, " seconds")
             time.sleep(ITERATION_SLEEP_TIME)
             continue
-        print("tipper: Report proof: ", oracle_proof)
-        oracle_update_tx_params = transform_oracle_update_params(oracle_proof)
-        print("tipper: Oracle update tx params: ", oracle_update_tx_params)
+        
+        print("tipper: Oracle data retrieved")
         ready_to_relay_time = time.time()
-        tx_hash, e = evm.update_oracle_data(oracle_update_tx_params)
-        if e:
-            print("tipper: Error updating oracle data: ", e)
+        
+        # Get the appropriate adapter and prepare user data
+        user_data = {
+            "begin_relay_timestamp": int(start_time),
+            "init_timestamp": int(start_time)
+        }
+        
+        # Update oracle data using the appropriate contract
+        result = evm.update_oracle_data(oracle_data, CONTRACT_TYPE, user_data)
+        if isinstance(result, tuple) and len(result) == 2:
+            tx_hash, e = result
+            if e:
+                print("tipper: Error updating oracle data: ", e)
+                print("tipper: Sleeping for ", ITERATION_SLEEP_TIME, " seconds")
+                time.sleep(ITERATION_SLEEP_TIME)
+                continue
+        else:
+            print("tipper: Unexpected result from update_oracle_data: ", result)
             print("tipper: Sleeping for ", ITERATION_SLEEP_TIME, " seconds")
             time.sleep(ITERATION_SLEEP_TIME)
             continue
+        
         print("tipper: Oracle data updated: ", tx_hash.hex())
 
         print("\ntipper: Time Report")
@@ -93,22 +128,22 @@ def start_tipper():
         print("tipper: Sleeping for ", ITERATION_SLEEP_TIME, " seconds")
         time.sleep(ITERATION_SLEEP_TIME)
 
-def tip(query_data) -> Exception:
+def tip(query_data, layer_address, layer_rpc_endpoint) -> Exception:
     # Remove '0x' prefix if it exists
     query_data_stripped = strip_0x(query_data)
     
     try:
         result = subprocess.run(
             ["layerd", "tx", "oracle", "tip",
-             LAYER_ADDRESS,  
+             layer_address,  
              query_data_stripped,
              "100000loya", 
-             "--from", LAYER_ADDRESS, 
+             "--from", layer_address, 
              "--chain-id", "layertest-3", 
              "--fees", "5loya", 
              "--keyring-backend", "test", 
              "--yes", 
-             "--node=" + LAYER_RPC_ENDPOINT],
+             "--node=" + layer_rpc_endpoint],
             capture_output=True,
             text=True,
             check=True

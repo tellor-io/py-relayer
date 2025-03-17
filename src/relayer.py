@@ -9,7 +9,8 @@ VALSET_SLEEP_TIME = 60
 
 def get_oracle_data(query_id):
     """
-    Get oracle data for a specific query ID
+    Get oracle data for a specific query ID from tellor chain
+    and transform it for the EVM contract
     
     Args:
         query_id: The query ID to get data for
@@ -54,8 +55,14 @@ def update_user_oracle_data(query_id=None, contract_type="SimpleLayerUser", user
         return None, error
     
     # Update oracle data using the appropriate contract
-    tx_hash = evm.update_oracle_data(oracle_data, contract_type, user_data)
-    if not tx_hash:
+    result = evm.update_oracle_data(oracle_data, contract_type, user_data)
+    if isinstance(result, tuple) and len(result) == 2:
+        tx_hash, e = result
+        if e:
+            print("relayer: Error updating oracle data: ", e)
+            return None, e
+    else:
+        print("relayer: Unexpected result from update_oracle_data: ", result)
         return None, "Failed to update oracle data"
     
     return tx_hash, None
@@ -79,14 +86,14 @@ def start_relayer():
             chain_status, error = get_layer_chain_status()
             if chain_status:
                 print(f"relayer: Layer chain status: {chain_status}")
-                time.sleep(sleep_time)
+                sleep(sleep_time)
                 continue
 
             # Valset update
             e = handle_validator_set_update(evm)
             if e:
                 print(f"relayer: Error handling validator set update: {e}")
-                time.sleep(sleep_time)
+                sleep(sleep_time)
                 continue
             
             # Update oracle data
@@ -96,15 +103,14 @@ def start_relayer():
             tx_hash, error = update_user_oracle_data(query_id, contract_type, user_data)
             if error:
                 print(f"relayer: Error updating oracle data: {error}")
-                time.sleep(sleep_time)
+                sleep(sleep_time)
                 continue
             
-            print(f"relayer: Oracle data updated. Transaction hash: {tx_hash.hex()}")
             
         except Exception as e:
             print(f"relayer: Unexpected error: {e}")
         
-        time.sleep(sleep_time)
+        sleep(sleep_time)
 
 def blobstream_init(evm) -> Exception:
     print("relayer: Initializing Blobstream...")
@@ -141,7 +147,7 @@ def update_to_latest_layer_validator_set(evm, blobstream_validator_timestamp, la
         valset_update_tx_params = transform_valset_update_params(valset_update_params)
         print("relayer: Valset update tx params: ", valset_update_tx_params)
         valset_update_tx = evm.update_validator_set(valset_update_tx_params)  # Use evm instance method
-        time.sleep(VALSET_SLEEP_TIME)
+        sleep(VALSET_SLEEP_TIME)
         layer_validator_timestamp, e = get_layer_latest_validator_timestamp()
         if e:
             return e
@@ -190,4 +196,7 @@ def handle_validator_set_update(evm) -> Exception:
             print("relayer: Error updating to latest Layer validator set: ", e)
             return e
 
+def sleep(seconds):
+    print("relayer: Sleeping for ", seconds, " seconds")
+    time.sleep(seconds)
     return None
