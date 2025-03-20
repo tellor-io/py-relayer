@@ -1,7 +1,8 @@
-from src.layer_client import query_validator_set_update, query_latest_oracle_data, get_blobstream_init_params, get_layer_latest_validator_timestamp, get_next_validator_set_timestamp, get_layer_chain_status, get_blobstream_reset_params, query_latest_oracle_data
+from src.layer_client import query_validator_set_update, query_latest_oracle_data, get_blobstream_init_params, get_layer_latest_validator_timestamp, get_next_validator_set_timestamp, get_layer_chain_status, get_blobstream_reset_params, query_latest_oracle_data, get_attestation_data_before, get_current_power_threshold, get_oracle_proof
 from src.evm_client import EVMClient  # Only import the class
 from src.transformer import transform_blobstream_init_params, transform_valset_update_params, transform_oracle_update_params, transform_blobstream_reset_params
 from src.email_client import send_email_alert
+from src.layer_tx_client import request_attestations
 import time
 import os
 
@@ -30,6 +31,75 @@ def get_oracle_data(query_id):
     
     return oracle_update_params, None
 
+def get_oracle_data_optimized(query_id, optimistic_delay=900, max_attestation_age=600, max_data_age=14400, min_stake_percentage=33):
+    """
+    Gets oracle data based on SamplePriceFeedUser preferences
+    
+    Args:
+        query_id: The query ID to get data for
+        optimistic_delay: The delay to use for optimistic data
+        max_attestation_age: The maximum age of an attestation
+        max_data_age: The maximum age of a report
+        min_stake_percentage: The minimum stake percentage to use for optimistic data
+
+    Algorithm:
+    - get latest report
+    - if consensus, use this
+        - check data age. if greater than max_data_age, (request new report?) just log warning and skip
+        - check attestation age. if greater than max_attestation_age, request new attestations for this and report
+    - if not consensus, check if lastConsensusTimestamp is less than optimistic_delay age. If so, use this.
+        - if attestation age is greater than max_attestation_age, request new attestations for this and report
+    - otherwise, getDataBefore(now - optimistic_delay)
+    - if this report has more stake than min_stake_percentage, request new attestations for this and report
+    """
+    attestation_data, e = get_attestation_data_before(query_id, int(time.time()) * 1000)
+    if e:
+        return None, e
+    relay_report_timestamp = 0
+    if attestation_data["last_consensus_timestamp"] == attestation_data["timestamp"]:
+        # is consensus
+        print("relayer: Latest report is consensus")
+    elif int(time.time()) * 1000 - int(attestation_data["last_consensus_timestamp"]) < optimistic_delay * 1000:
+        # last consensus timestamp is less than optimistic delay, use this
+        print("relayer: Latest report is not consensus, but last consensus timestamp is less than optimistic delay")
+        attestation_data, e = get_attestation_data_before(query_id, int(attestation_data["last_consensus_timestamp"]) + 1)
+        if e:
+            return None, e
+    else:
+        # no consensus, get data before now - optimistic_delay
+        print("relayer: Latest report is not consensus, and last consensus timestamp is older than optimistic delay")
+        attestation_data, e = get_attestation_data_before(query_id, int(time.time()) * 1000 - optimistic_delay)
+        if e:
+            return None, e
+        current_power_threshold, e = get_current_power_threshold()
+        if e:
+            return None, e
+        if int(attestation_data["report"]["aggregate_power"]) < current_power_threshold * 3/2 * min_stake_percentage / 100:
+            # report has too little stake
+            print("relayer: Report has too little stake")
+            # TODO: implement tip, request new report?
+            return None, "Report has too little stake"
+    
+    # check report and attestation data age
+    if int(time.time()) * 1000 - int(attestation_data["timestamp"]) > max_data_age * 1000:
+        # report is too old, no good data
+        return None, f"Report is too old. Report timestamp: {attestation_data['timestamp']} Current timestamp: {int(time.time()) * 1000}"
+    if int(time.time()) * 1000 - int(attestation_data["attestation_timestamp"]) > max_attestation_age * 1000:
+        # attestation is too old, request new attestations
+        print("relayer: Attestation is too old, requesting new attestations")
+        e = request_attestations(query_id, attestation_data["timestamp"], os.getenv("LAYER_ADDRESS"), os.getenv("LAYER_RPC_ENDPOINT"))
+        if e:
+            return None, e
+    # get the report and attestation data
+    oracle_proof, e = get_oracle_proof(query_id, attestation_data["timestamp"])
+    if e:
+        return None, e
+    
+    # transform the oracle proof for the EVM contract
+    oracle_update_params = transform_oracle_update_params(oracle_proof)
+
+    return oracle_update_params, None
+
 def update_user_oracle_data(query_id=None, contract_type="SimpleLayerUser", user_data=None):
     """
     Update oracle data for a specific query ID
@@ -49,7 +119,10 @@ def update_user_oracle_data(query_id=None, contract_type="SimpleLayerUser", user
     evm.init_web3()
     
     # Get oracle data
-    oracle_data, error = get_oracle_data(query_id)
+    if contract_type == "TestPriceFeedUser":
+        oracle_data, error = get_oracle_data_optimized(query_id)
+    else:
+        oracle_data, error = get_oracle_data(query_id)
     if error:
         print(f"relayer: Error getting oracle data: {error}")
         return None, error
