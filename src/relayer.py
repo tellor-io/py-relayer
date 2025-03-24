@@ -1,4 +1,4 @@
-from src.layer_client import query_validator_set_update, query_latest_oracle_data, get_blobstream_init_params, get_layer_latest_validator_timestamp, get_next_validator_set_timestamp, get_layer_chain_status, get_blobstream_reset_params, query_latest_oracle_data, get_attestation_data_before, get_current_power_threshold, get_oracle_proof
+from src.layer_client import query_validator_set_update, query_latest_oracle_data, get_blobstream_init_params, get_layer_latest_validator_timestamp, get_next_validator_set_timestamp, get_layer_chain_status, get_blobstream_reset_params, query_latest_oracle_data, get_attestation_data_before, get_current_power_threshold, get_oracle_proof, get_layer_connection_status
 from src.evm_client import EVMClient  # Only import the class
 from src.transformer import transform_blobstream_init_params, transform_valset_update_params, transform_oracle_update_params, transform_blobstream_reset_params
 from src.email_client import send_email_alert
@@ -87,7 +87,11 @@ def get_oracle_data_optimized(query_id, optimistic_delay=900, max_attestation_ag
     if int(time.time()) * 1000 - int(attestation_data["attestation_timestamp"]) > max_attestation_age * 1000:
         # attestation is too old, request new attestations
         print("relayer: Attestation is too old, requesting new attestations")
-        e = request_attestations(query_id, attestation_data["timestamp"], os.getenv("LAYER_ADDRESS"), os.getenv("LAYER_RPC_ENDPOINT"))
+        layer_status, e = get_layer_connection_status()
+        if e:
+            return None, e
+        chain_id = layer_status.get("result").get("node_info").get("network")
+        e = request_attestations(query_id, attestation_data["timestamp"], os.getenv("LAYER_ADDRESS"), os.getenv("LAYER_RPC_ENDPOINT"), chain_id)
         if e:
             return None, e
     # get the report and attestation data

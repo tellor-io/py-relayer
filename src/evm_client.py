@@ -246,9 +246,10 @@ class EVMClient:
     def withdraw_from_layer(self, params: dict):
         if not self.token_bridge_contract:
             raise Exception("Token bridge contract not initialized")
-        tx = self.token_bridge_contract.functions.withdraw(
-            params['attestation_data'],
-            params['signatures'],
+        tx = self.token_bridge_contract.functions.withdrawFromLayer(
+            params['oracle_attestation_data'],
+            params['current_validator_set'],
+            params['sigs'],
             params['withdraw_id']
         ).build_transaction({
             'from': self.web3_acct.address,
