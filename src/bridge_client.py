@@ -3,6 +3,7 @@ from eth_abi import encode
 from src.layer_client import query_latest_oracle_data
 from src.evm_client import EVMClient
 from src.transformer import transform_withdraw_tx_params
+from src.relayer import handle_validator_set_update
 import time
 import os
 
@@ -63,6 +64,12 @@ def relay_withdraw(withdraw_id) -> (int, Exception):
     if claimed:
         print("bridge_client: Withdraw already claimed")
         return 1, None
+    
+    # update validator set
+    e = handle_validator_set_update(evm)
+    if e:
+        print("bridge_client: Error updating validator set: ", e)
+        return None, e
     
     oracle_update_tx_params = transform_withdraw_tx_params(oracle_proof, withdraw_id)
     print("bridge_client: Oracle update tx params: ", oracle_update_tx_params)

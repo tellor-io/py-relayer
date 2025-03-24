@@ -224,6 +224,7 @@ def update_to_latest_layer_validator_set(evm, blobstream_validator_timestamp, la
         valset_update_tx_params = transform_valset_update_params(valset_update_params)
         print("relayer: Valset update tx params: ", valset_update_tx_params)
         valset_update_tx = evm.update_validator_set(valset_update_tx_params)  # Use evm instance method
+        print("relayer: Submitted valset update tx")
         sleep(VALSET_SLEEP_TIME)
         layer_validator_timestamp, e = get_layer_latest_validator_timestamp()
         if e:

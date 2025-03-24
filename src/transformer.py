@@ -103,7 +103,8 @@ def transform_withdraw_tx_params(withdraw_tx_params: dict, withdraw_id: int) -> 
                 "timestamp": int(attestation_data["timestamp"]),
                 "aggregatePower": int(attestation_data["aggregate_power"]),
                 "previousTimestamp": int(attestation_data["previous_report_timestamp"]),
-                "nextTimestamp": int(attestation_data["next_report_timestamp"])
+                "nextTimestamp": int(attestation_data["next_report_timestamp"]),
+                "lastConsensusTimestamp": int(attestation_data["last_consensus_timestamp"])
             },
             "attestationTimestamp": int(attestation_data["attestation_timestamp"])
         },
