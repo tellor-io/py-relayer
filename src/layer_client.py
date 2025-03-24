@@ -173,7 +173,26 @@ def query_latest_oracle_data(query_id) -> (dict, Exception):
     report, e = get_data_before(query_id, current_time)
     if e:
         return None, e
+    return get_oracle_proof(query_id, report["timestamp"])
+
+def get_attestation_data_before(query_id, timestamp) -> (dict, Exception):
+    print(f"layer_client: Querying attestation data before {timestamp}")
+    report, e = get_data_before(query_id, timestamp)
+    if e:
+        return None, e
     snapshots, e = get_snapshots_by_report(query_id, report["timestamp"])
+    if e:
+        return None, e
+    last_snapshot = snapshots["snapshots"][-1]
+    attestation_data, e = get_attestation_data_by_snapshot(last_snapshot)
+    if e:
+        return None, e
+    print(f"layer_client: Attestation data: {attestation_data}")
+    return attestation_data, None
+
+def get_oracle_proof(query_id, timestamp) -> (dict, Exception):
+    print(f"layer_client: Querying oracle proof for {timestamp}")
+    snapshots, e = get_snapshots_by_report(query_id, timestamp)
     if e:
         return None, e
     last_snapshot = snapshots["snapshots"][-1]
