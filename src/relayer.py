@@ -74,7 +74,7 @@ def get_oracle_data_optimized(query_id, optimistic_delay=900, max_attestation_ag
         current_power_threshold, e = get_current_power_threshold()
         if e:
             return None, e
-        if int(attestation_data["report"]["aggregate_power"]) < current_power_threshold * 3/2 * min_stake_percentage / 100:
+        if int(attestation_data["aggregate_power"]) < current_power_threshold * 3/2 * min_stake_percentage / 100:
             # report has too little stake
             print("relayer: Report has too little stake")
             # TODO: implement tip, request new report?
