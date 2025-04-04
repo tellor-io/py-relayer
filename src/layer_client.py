@@ -2,23 +2,30 @@
 import requests
 import time
 import os
-from dotenv import load_dotenv
-from time import sleep
-from datetime import datetime
 from dateutil import parser
-
-load_dotenv()
-
-SWAGGER_ENDPOINT = os.getenv("LAYER_SWAGGER_ENDPOINT")
-RPC_ENDPOINT = os.getenv("LAYER_RPC_ENDPOINT")
 
 def strip_0x(value):
     if value.startswith("0x"):
         return value[2:]
     return value
 
-def get_layer_chain_status() -> (str, Exception):
-    request = f"{RPC_ENDPOINT}/status"
+def get_layer_connection_status() -> tuple[str, Exception]:
+    swagger_endpoint = os.getenv("LAYER_SWAGGER_ENDPOINT")
+    rpc_endpoint = os.getenv("LAYER_RPC_ENDPOINT")
+    print("layer_client: Getting layer connection status")
+    print("layer_client: swagger endpoint: ", swagger_endpoint)
+    print("layer_client: rpc endpoint: ", rpc_endpoint)
+    request = f"{rpc_endpoint}/status"
+    try:
+        response = requests.get(request)
+        return response.json(), None
+    except Exception as e:
+        print(f"layer_client: Error getting layer connection status: {e}")
+        return None, e
+
+def get_layer_chain_status() -> tuple[str, Exception]:
+    rpc_endpoint = os.getenv("LAYER_RPC_ENDPOINT")
+    request = f"{rpc_endpoint}/status"
     try:
         response = requests.get(request)
         if response.status_code != 200:
@@ -40,10 +47,17 @@ def get_layer_chain_status() -> (str, Exception):
     except Exception as e:
         message = f"layer_client: Error getting layer chain status: {e}"
         return message, e
+    
+def get_layer_chain_id() -> tuple[str, Exception]:
+    layer_status, e = get_layer_connection_status()
+    if e:
+        return None, e
+    return layer_status.get("result").get("node_info").get("network"), None
 
 # validator set functions
-def get_validator_timestamp_by_index(index) -> (dict, Exception):
-    request = f"{SWAGGER_ENDPOINT}/layer/bridge/get_validator_timestamp_by_index/{index}"
+def get_validator_timestamp_by_index(index: int) -> tuple[dict, Exception]:
+    swagger_endpoint = os.getenv("LAYER_SWAGGER_ENDPOINT")
+    request = f"{swagger_endpoint}/layer/bridge/get_validator_timestamp_by_index/{index}"
     try:
         response = requests.get(request)
         return response.json(), None
@@ -51,8 +65,9 @@ def get_validator_timestamp_by_index(index) -> (dict, Exception):
         print(f"layer_client: Error getting validator timestamp by index: {e}")
         return None, e
 
-def get_validator_checkpoint_params(timestamp) -> (dict, Exception):
-    request = f"{SWAGGER_ENDPOINT}/layer/bridge/get_validator_checkpoint_params/{timestamp}"
+def get_validator_checkpoint_params(timestamp: int) -> tuple[dict, Exception]:
+    swagger_endpoint = os.getenv("LAYER_SWAGGER_ENDPOINT")
+    request = f"{swagger_endpoint}/layer/bridge/get_validator_checkpoint_params/{timestamp}"
     try:
         response = requests.get(request)
         return response.json(), None
@@ -60,8 +75,9 @@ def get_validator_checkpoint_params(timestamp) -> (dict, Exception):
         print(f"layer_client: Error getting validator checkpoint params: {e}")
         return None, e
 
-def get_valset_by_timestamp(timestamp) -> (dict, Exception):
-    request = f"{SWAGGER_ENDPOINT}/layer/bridge/get_valset_by_timestamp/{timestamp}"
+def get_valset_by_timestamp(timestamp: int) -> tuple[dict, Exception]:
+    swagger_endpoint = os.getenv("LAYER_SWAGGER_ENDPOINT")
+    request = f"{swagger_endpoint}/layer/bridge/get_valset_by_timestamp/{timestamp}"
     try:
         response = requests.get(request)
         return response.json(), None
@@ -69,8 +85,9 @@ def get_valset_by_timestamp(timestamp) -> (dict, Exception):
         print(f"layer_client: Error getting validator set by timestamp: {e}")
         return None, e
 
-def get_valset_sigs(timestamp) -> (dict, Exception):
-    request = f"{SWAGGER_ENDPOINT}/layer/bridge/get_valset_sigs/{timestamp}"
+def get_valset_sigs(timestamp: int) -> tuple[dict, Exception]:
+    swagger_endpoint = os.getenv("LAYER_SWAGGER_ENDPOINT")
+    request = f"{swagger_endpoint}/layer/bridge/get_valset_sigs/{timestamp}"
     try:
         response = requests.get(request)
         return response.json(), None
@@ -78,8 +95,9 @@ def get_valset_sigs(timestamp) -> (dict, Exception):
         print(f"layer_client: Error getting validator set sigs: {e}")
         return None, e
 
-def get_current_validator_set_timestamp() -> (str, Exception):
-    request = f"{SWAGGER_ENDPOINT}/layer/bridge/get_current_validator_set_timestamp"
+def get_current_validator_set_timestamp() -> tuple[str, Exception]:
+    swagger_endpoint = os.getenv("LAYER_SWAGGER_ENDPOINT")
+    request = f"{swagger_endpoint}/layer/bridge/get_current_validator_set_timestamp"
     try:
         response = requests.get(request)
         return response.json(), None
@@ -87,8 +105,9 @@ def get_current_validator_set_timestamp() -> (str, Exception):
         print(f"layer_client: Error getting current validator set timestamp: {e}")
         return None, e
 
-def get_validator_set_index_by_timestamp(timestamp) -> (dict, Exception):
-    request = f"{SWAGGER_ENDPOINT}/layer/bridge/get_validator_set_index_by_timestamp/{timestamp}"
+def get_validator_set_index_by_timestamp(timestamp: int) -> tuple[dict, Exception]:
+    swagger_endpoint = os.getenv("LAYER_SWAGGER_ENDPOINT")
+    request = f"{swagger_endpoint}/layer/bridge/get_validator_set_index_by_timestamp/{timestamp}"
     try:
         response = requests.get(request)
         return response.json(), None
@@ -97,19 +116,32 @@ def get_validator_set_index_by_timestamp(timestamp) -> (dict, Exception):
         return None, e
 
 # oracle data functions 
-def get_data_before(query_id, timestamp_before) -> (dict, Exception):
+def get_data_before(query_id: str, timestamp_before: int) -> tuple[dict, Exception]:
     query_id = strip_0x(query_id)
-    request = f"{SWAGGER_ENDPOINT}/tellor-io/layer/oracle/get_data_before/{query_id}/{timestamp_before}"
+    swagger_endpoint = os.getenv("LAYER_SWAGGER_ENDPOINT")
+    request = f"{swagger_endpoint}/tellor-io/layer/oracle/get_data_before/{query_id}/{timestamp_before}"
     try:
         response = requests.get(request)
         return response.json(), None
     except Exception as e:
         print(f"layer_client: Error getting data before: {e}")
         return None, e
-
-def get_snapshots_by_report(query_id, timestamp) -> (dict, Exception):
+    
+def get_current_aggregate_report(query_id: str) -> tuple[dict, Exception]:
     query_id = strip_0x(query_id)
-    request = f"{SWAGGER_ENDPOINT}/layer/bridge/get_snapshots_by_report/{query_id}/{timestamp}"
+    swagger_endpoint = os.getenv("LAYER_SWAGGER_ENDPOINT")
+    request = f"{swagger_endpoint}/tellor-io/layer/oracle/get_current_aggregate_report/{query_id}"
+    try:
+        response = requests.get(request)
+        return response.json(), None
+    except Exception as e:
+        print(f"layer_client: Error getting current aggregate report: {e}")
+        return None, e
+
+def get_snapshots_by_report(query_id: str, timestamp: int) -> tuple[dict, Exception]:
+    query_id = strip_0x(query_id)
+    swagger_endpoint = os.getenv("LAYER_SWAGGER_ENDPOINT")
+    request = f"{swagger_endpoint}/layer/bridge/get_snapshots_by_report/{query_id}/{timestamp}"
     try:
         response = requests.get(request)
         return response.json(), None
@@ -117,8 +149,9 @@ def get_snapshots_by_report(query_id, timestamp) -> (dict, Exception):
         print(f"layer_client: Error getting snapshots by report: {e}")
         return None, e
 
-def get_attestations_by_snapshot(snapshot) -> (dict, Exception):
-    request = f"{SWAGGER_ENDPOINT}/layer/bridge/get_attestations_by_snapshot/{snapshot}"
+def get_attestations_by_snapshot(snapshot: str) -> tuple[dict, Exception]:
+    swagger_endpoint = os.getenv("LAYER_SWAGGER_ENDPOINT")
+    request = f"{swagger_endpoint}/layer/bridge/get_attestations_by_snapshot/{snapshot}"
     try:
         response = requests.get(request)
         return response.json(), None
@@ -126,8 +159,9 @@ def get_attestations_by_snapshot(snapshot) -> (dict, Exception):
         print(f"layer_client: Error getting attestations by snapshot: {e}")
         return None, e
 
-def get_attestation_data_by_snapshot(snapshot) -> (dict, Exception):
-    request = f"{SWAGGER_ENDPOINT}/layer/bridge/get_attestation_data_by_snapshot/{snapshot}"
+def get_attestation_data_by_snapshot(snapshot: str) -> tuple[dict, Exception]:
+    swagger_endpoint = os.getenv("LAYER_SWAGGER_ENDPOINT")
+    request = f"{swagger_endpoint}/layer/bridge/get_attestation_data_by_snapshot/{snapshot}"
     try:
         response = requests.get(request)
         return response.json(), None
@@ -137,7 +171,7 @@ def get_attestation_data_by_snapshot(snapshot) -> (dict, Exception):
 
 ## queries
 
-def query_latest_oracle_data(query_id) -> (dict, Exception):
+def query_latest_oracle_data(query_id: str) -> tuple[dict, Exception]:
     print("layer_client: Querying latest oracle data")
     # subtract 1 second to account for attestation time,
     # TODO: optimize
@@ -145,7 +179,26 @@ def query_latest_oracle_data(query_id) -> (dict, Exception):
     report, e = get_data_before(query_id, current_time)
     if e:
         return None, e
+    return get_oracle_proof(query_id, report["timestamp"])
+
+def get_attestation_data_before(query_id: str, timestamp: int) -> tuple[dict, Exception]:
+    print(f"layer_client: Querying attestation data before {timestamp}")
+    report, e = get_data_before(query_id, timestamp)
+    if e:
+        return None, e
     snapshots, e = get_snapshots_by_report(query_id, report["timestamp"])
+    if e:
+        return None, e
+    last_snapshot = snapshots["snapshots"][-1]
+    attestation_data, e = get_attestation_data_by_snapshot(last_snapshot)
+    if e:
+        return None, e
+    print(f"layer_client: Attestation data: {attestation_data}")
+    return attestation_data, None
+
+def get_oracle_proof(query_id: str, timestamp: int) -> tuple[dict, Exception]:
+    print(f"layer_client: Querying oracle proof for {timestamp}")
+    snapshots, e = get_snapshots_by_report(query_id, timestamp)
     if e:
         return None, e
     last_snapshot = snapshots["snapshots"][-1]
@@ -168,16 +221,22 @@ def query_latest_oracle_data(query_id) -> (dict, Exception):
     )
     if not sufficient_power:
         retry_sleep_time = 3
-        print(f"layer_client: Insufficient attestation power, sleeping for {retry_sleep_time} seconds")
-        sleep(retry_sleep_time)
-        attestations, e = get_attestations_by_snapshot(last_snapshot)
-        if e:
-            return None, e
-        sufficient_power = get_sufficient_attestation_power(
-            attestations.get("attestations"), 
-            current_validator_set.get("bridge_validator_set"), 
-            threshold
-        )
+        retry_count = 0
+        while retry_count < 3:
+            print(f"layer_client: Insufficient attestation power, sleeping for {retry_sleep_time} seconds")
+            time.sleep(retry_sleep_time)
+            attestations, e = get_attestations_by_snapshot(last_snapshot)
+            if e:
+                return None, e
+            retry_count += 1
+            sufficient_power = get_sufficient_attestation_power(
+                attestations.get("attestations"), 
+                current_validator_set.get("bridge_validator_set"), 
+                threshold
+            )
+            if sufficient_power:
+                break
+            retry_sleep_time = int(retry_sleep_time * 1.5)
         if not sufficient_power:
             return None, Exception("layer_client: Insufficient attestation power")
     oracle_proof = {
@@ -188,14 +247,14 @@ def query_latest_oracle_data(query_id) -> (dict, Exception):
     }
     return oracle_proof, None
 
-def get_sufficient_attestation_power(attestations, current_validator_set, threshold) -> bool:
+def get_sufficient_attestation_power(attestations: list[dict], current_validator_set: dict, threshold: int) -> bool:
     power_sum = 0
     for i in range(len(attestations)):
         if len(attestations[i]) > 0:
             power_sum += int(current_validator_set[i]["power"])
     return power_sum >= int(threshold)
 
-def get_next_validator_set_timestamp(given_timestamp) -> (str, Exception):
+def get_next_validator_set_timestamp(given_timestamp: int) -> tuple[str, Exception]:
     given_ts_index, e = get_validator_set_index_by_timestamp(given_timestamp)
     if e:
         return None, e
@@ -207,7 +266,7 @@ def get_next_validator_set_timestamp(given_timestamp) -> (str, Exception):
         return None, e
     return next_ts.get("timestamp"), None
 
-def get_previous_validator_set_timestamp(given_timestamp) -> (str, Exception):
+def get_previous_validator_set_timestamp(given_timestamp: int) -> tuple[str, Exception]:
     given_ts_index, e = get_validator_set_index_by_timestamp(given_timestamp)
     if e:
         return None, e
@@ -221,7 +280,7 @@ def get_previous_validator_set_timestamp(given_timestamp) -> (str, Exception):
         return None, Exception("layer_client: Invalid timestamp")
     return previous_ts.get("timestamp"), None
 
-def query_validator_set_update(given_timestamp) -> (dict, Exception):
+def query_validator_set_update(given_timestamp: int) -> tuple[dict, Exception]:
     valset_sigs, e = get_valset_sigs(given_timestamp)
     if e:
         return None, e
@@ -241,7 +300,7 @@ def query_validator_set_update(given_timestamp) -> (dict, Exception):
     }
     return valset_update_params, None
 
-def get_blobstream_init_params() -> (dict, Exception):
+def get_blobstream_init_params() -> tuple[dict, Exception]:
     first_timestamp, e = get_validator_timestamp_by_index(0)
     if e:
         return None, e
@@ -250,20 +309,20 @@ def get_blobstream_init_params() -> (dict, Exception):
         return None, e
     return checkpoint_params, None
 
-def get_blobstream_reset_params() -> (dict, Exception):
+def get_blobstream_reset_params() -> tuple[dict, Exception]:
     latest_timestamp, e = get_layer_latest_validator_timestamp()
     checkpoint_params, e = get_validator_checkpoint_params(latest_timestamp)
     if e:
         return None, e
     return checkpoint_params, None
 
-def get_layer_latest_validator_timestamp() -> (str, Exception):
+def get_layer_latest_validator_timestamp() -> tuple[str, Exception]:
     latest_timestamp, e = get_current_validator_set_timestamp()
     if e:
         return None, e
     return latest_timestamp.get("timestamp"), None
 
-def get_current_validator_set() -> (dict, Exception):
+def get_current_validator_set() -> tuple[dict, Exception]:
     latest_timestamp, e = get_layer_latest_validator_timestamp()
     if e:
         return None, e
@@ -272,7 +331,7 @@ def get_current_validator_set() -> (dict, Exception):
         return None, e
     return valset, None
 
-def get_current_power_threshold() -> (int, Exception):
+def get_current_power_threshold() -> tuple[int, Exception]:
     latest_timestamp, e = get_layer_latest_validator_timestamp()
     if e:
         return None, e

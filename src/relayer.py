@@ -1,66 +1,195 @@
-from layer_client import query_validator_set_update, query_latest_oracle_data, get_blobstream_init_params, get_layer_latest_validator_timestamp, get_next_validator_set_timestamp, get_layer_chain_status, get_blobstream_reset_params
-from evm_client import init_web3, get_blobstream_validator_timestamp, init_blobstream, update_validator_set, get_current_price_data_timestamp, update_oracle_data, reset_blobstream
-from transformer import transform_blobstream_init_params, transform_valset_update_params, transform_oracle_update_params, transform_blobstream_reset_params
-from email_client import send_email_alert
+from src.layer_client import query_validator_set_update, query_latest_oracle_data, get_blobstream_init_params, get_layer_latest_validator_timestamp, get_next_validator_set_timestamp, get_layer_chain_status, get_blobstream_reset_params, query_latest_oracle_data, get_attestation_data_before, get_current_power_threshold, get_oracle_proof, get_layer_connection_status
+from src.evm_client import EVMClient  # Only import the class
+from src.transformer import transform_blobstream_init_params, transform_valset_update_params, transform_oracle_update_params, transform_blobstream_reset_params
+from src.email_client import send_email_alert
+from src.layer_tx_client import request_attestations
 import time
 import os
-from dotenv import load_dotenv
 
-load_dotenv()
-
-QUERY_ID = os.getenv("QUERY_ID")
-SLEEP_TIME = int(os.getenv("SLEEP_TIME"))
 VALSET_SLEEP_TIME = 60
 
-def start_relayer():
-    print("relayer: Starting relayer...")
-
-    print("relayer: Initializing web3...")
-    init_web3()
-    blobstream_validator_timestamp = get_blobstream_validator_timestamp()
-    print("relayer: Blobstream validator timestamp: ", blobstream_validator_timestamp)
-
-    if blobstream_validator_timestamp == 0:
-        print("relayer: Initializing Blobstream...")
-        e = blobstream_init()
-        if e:
-            print("relayer: Error initializing Blobstream: ", e)
-            return
+def get_oracle_data(query_id):
+    """
+    Get oracle data for a specific query ID from tellor chain
+    and transform it for the EVM contract
     
-    # check if blobstream validator timestamp is stale (> 21 days old)
-    current_timestamp = time.time()
-    if current_timestamp * 1000 - blobstream_validator_timestamp > 21 * 24 * 60 * 60 * 1000:
-        print("relayer: Blobstream validator timestamp is stale. Resetting if you are the guardian.")
-        e = blobstream_reset()
-        if e:
-            print("relayer: Error resetting Blobstream: ", e)
-            return
+    Args:
+        query_id: The query ID to get data for
+    
+    Returns:
+        tuple: (oracle_data, error)
+    """
+    print(f"relayer: Getting oracle data for query ID {query_id}")
+    
+    # Get oracle data from Layer chain
+    oracle_data_response, error = query_latest_oracle_data(query_id)
+    if error:
+        return None, f"Failed to get oracle data: {error}"
+    
+    # Transform oracle data for EVM contract
+    oracle_update_params = transform_oracle_update_params(oracle_data_response)
+    
+    return oracle_update_params, None
 
+def get_oracle_data_optimized(query_id, optimistic_delay=900, max_attestation_age=600, max_data_age=14400, min_stake_percentage=33):
+    """
+    Gets oracle data based on SamplePriceFeedUser preferences
+    
+    Args:
+        query_id: The query ID to get data for
+        optimistic_delay: The delay to use for optimistic data
+        max_attestation_age: The maximum age of an attestation
+        max_data_age: The maximum age of a report
+        min_stake_percentage: The minimum stake percentage to use for optimistic data
+
+    Algorithm:
+    - get latest report
+    - if consensus, use this
+        - check data age. if greater than max_data_age, (request new report?) just log warning and skip
+        - check attestation age. if greater than max_attestation_age, request new attestations for this and report
+    - if not consensus, check if lastConsensusTimestamp is less than optimistic_delay age. If so, use this.
+        - if attestation age is greater than max_attestation_age, request new attestations for this and report
+    - otherwise, getDataBefore(now - optimistic_delay)
+    - if this report has more stake than min_stake_percentage, request new attestations for this and report
+    """
+    attestation_data, e = get_attestation_data_before(query_id, int(time.time()) * 1000)
+    if e:
+        return None, e
+    relay_report_timestamp = 0
+    if attestation_data["last_consensus_timestamp"] == attestation_data["timestamp"]:
+        # is consensus
+        print("relayer: Latest report is consensus")
+    elif int(time.time()) * 1000 - int(attestation_data["last_consensus_timestamp"]) < optimistic_delay * 1000:
+        # last consensus timestamp is less than optimistic delay, use this
+        print("relayer: Latest report is not consensus, but last consensus timestamp is less than optimistic delay")
+        attestation_data, e = get_attestation_data_before(query_id, int(attestation_data["last_consensus_timestamp"]) + 1)
+        if e:
+            return None, e
+    else:
+        # no consensus, get data before now - optimistic_delay
+        print("relayer: Latest report is not consensus, and last consensus timestamp is older than optimistic delay")
+        attestation_data, e = get_attestation_data_before(query_id, int(time.time()) * 1000 - optimistic_delay)
+        if e:
+            return None, e
+        current_power_threshold, e = get_current_power_threshold()
+        if e:
+            return None, e
+        if int(attestation_data["aggregate_power"]) < current_power_threshold * 3/2 * min_stake_percentage / 100:
+            # report has too little stake
+            print("relayer: Report has too little stake")
+            # TODO: implement tip, request new report?
+            return None, "Report has too little stake"
+    
+    # check report and attestation data age
+    if int(time.time()) * 1000 - int(attestation_data["timestamp"]) > max_data_age * 1000:
+        # report is too old, no good data
+        return None, f"Report is too old. Report timestamp: {attestation_data['timestamp']} Current timestamp: {int(time.time()) * 1000}"
+    if int(time.time()) * 1000 - int(attestation_data["attestation_timestamp"]) > max_attestation_age * 1000:
+        # attestation is too old, request new attestations
+        print("relayer: Attestation is too old, requesting new attestations")
+        layer_status, e = get_layer_connection_status()
+        if e:
+            return None, e
+        chain_id = layer_status.get("result").get("node_info").get("network")
+        e = request_attestations(query_id, attestation_data["timestamp"], os.getenv("LAYER_ADDRESS"), os.getenv("LAYER_RPC_ENDPOINT"), chain_id)
+        if e:
+            return None, e
+    # get the report and attestation data
+    oracle_proof, e = get_oracle_proof(query_id, attestation_data["timestamp"])
+    if e:
+        return None, e
+    
+    # transform the oracle proof for the EVM contract
+    oracle_update_params = transform_oracle_update_params(oracle_proof)
+
+    return oracle_update_params, None
+
+def update_user_oracle_data(query_id=None, contract_type="SimpleLayerUser", user_data=None):
+    """
+    Update oracle data for a specific query ID
+    
+    Args:
+        query_id: The query ID to update
+        contract_type: The type of contract to use (SimpleLayerUser, TestPriceFeedUser, etc.)
+        user_data: Additional user-specific data needed by the adapter
+    """
+    if query_id is None:
+        query_id = os.getenv("QUERY_ID")
+    
+    print(f"relayer: Updating oracle data for query ID {query_id} using {contract_type} contract...")
+    
+    # Initialize EVM client
+    evm = EVMClient()
+    evm.init_web3()
+    
+    # Get oracle data
+    if contract_type == "TestPriceFeedUser":
+        oracle_data, error = get_oracle_data_optimized(query_id)
+    else:
+        oracle_data, error = get_oracle_data(query_id)
+    if error:
+        print(f"relayer: Error getting oracle data: {error}")
+        return None, error
+    
+    # Update oracle data using the appropriate contract
+    result = evm.update_oracle_data(oracle_data, contract_type, user_data)
+    if isinstance(result, tuple) and len(result) == 2:
+        tx_hash, e = result
+        if e:
+            print("relayer: Error updating oracle data: ", e)
+            return None, e
+    else:
+        print("relayer: Unexpected result from update_oracle_data: ", result)
+        return None, "Failed to update oracle data"
+    
+    return tx_hash, None
+
+def start_relayer():
+    """Start the relayer process"""
+    query_id = os.getenv("QUERY_ID")
+    sleep_time = int(os.getenv("SLEEP_TIME", "600"))
+    contract_type = os.getenv("CONTRACT_TYPE", "SimpleLayerUser")
+    
+    print(f"relayer: Starting relayer for query ID {query_id} using {contract_type} contract...")
+    print(f"relayer: Sleep time: {sleep_time} seconds")
+
+    evm = EVMClient()
+    evm.init_web3()
+    evm.setup_blobstream_contract()
+    
     while True:
-        time.sleep(SLEEP_TIME)
-        e = check_layer_chain_status()
-        if e:
-            print("relayer: Error checking layer chain status: ", e)
-            continue
-        layer_validator_timestamp, e = get_layer_latest_validator_timestamp()
-        if e:
-            print("relayer: Error getting latest Layer validator timestamp: ", e)
-            continue
-        print("relayer: Layer validator timestamp: ", layer_validator_timestamp)
-        blobstream_validator_timestamp = get_blobstream_validator_timestamp()
-        print("relayer: Blobstream validator timestamp: ", blobstream_validator_timestamp)
-        if int(blobstream_validator_timestamp) < int(layer_validator_timestamp):
-            print("relayer: Updating to latest Layer validator set...")
-            e = update_to_latest_layer_validator_set(blobstream_validator_timestamp, layer_validator_timestamp)
-            if e:
-                print("relayer: Error updating to latest Layer validator set: ", e)
+        try:
+            # Check layer chain status
+            chain_status, error = get_layer_chain_status()
+            if chain_status:
+                print(f"relayer: Layer chain status: {chain_status}")
+                sleep(sleep_time)
                 continue
-        e = update_user_oracle_data(QUERY_ID)
-        if e:
-            print("relayer: Error updating user oracle data: ", e)
-            continue
 
-def blobstream_init() -> Exception:
+            # Valset update
+            e = handle_validator_set_update(evm)
+            if e:
+                print(f"relayer: Error handling validator set update: {e}")
+                sleep(sleep_time)
+                continue
+            
+            # Update oracle data
+            begin_relay_timestamp = int(time.time())
+            user_data = {"begin_relay_timestamp": begin_relay_timestamp}
+            
+            tx_hash, error = update_user_oracle_data(query_id, contract_type, user_data)
+            if error:
+                print(f"relayer: Error updating oracle data: {error}")
+                sleep(sleep_time)
+                continue
+            
+            
+        except Exception as e:
+            print(f"relayer: Unexpected error: {e}")
+        
+        sleep(sleep_time)
+
+def blobstream_init(evm) -> Exception:
     print("relayer: Initializing Blobstream...")
     checkpoint_params, e = get_blobstream_init_params()
     if e:
@@ -68,11 +197,11 @@ def blobstream_init() -> Exception:
     print("relayer: Checkpoint params: ", checkpoint_params)
     init_tx_params = transform_blobstream_init_params(checkpoint_params)
     print("relayer: Init tx params: ", init_tx_params)
-    init_tx = init_blobstream(init_tx_params)
+    init_tx = evm.init_blobstream(init_tx_params)  # Use evm instance method
     print("relayer: Init tx: ", init_tx)
     return None
 
-def blobstream_reset() -> Exception:
+def blobstream_reset(evm) -> Exception:
     print("relayer: Resetting Blobstream...")
     checkpoint_params, e = get_blobstream_reset_params()
     if e:
@@ -80,10 +209,10 @@ def blobstream_reset() -> Exception:
     print("relayer: Checkpoint params: ", checkpoint_params)
     reset_tx_params = transform_blobstream_reset_params(checkpoint_params)
     print("relayer: Reset tx params: ", reset_tx_params)
-    reset_blobstream(reset_tx_params)
+    evm.reset_blobstream(reset_tx_params)  # Use evm instance method
     return None
 
-def update_to_latest_layer_validator_set(blobstream_validator_timestamp, layer_validator_timestamp) -> Exception:
+def update_to_latest_layer_validator_set(evm, blobstream_validator_timestamp, layer_validator_timestamp) -> Exception:
     while int(blobstream_validator_timestamp) < int(layer_validator_timestamp):
         next_validator_timestamp, e = get_next_validator_set_timestamp(blobstream_validator_timestamp)
         if e:
@@ -94,40 +223,32 @@ def update_to_latest_layer_validator_set(blobstream_validator_timestamp, layer_v
         print("relayer: Valset update params: ", valset_update_params)
         valset_update_tx_params = transform_valset_update_params(valset_update_params)
         print("relayer: Valset update tx params: ", valset_update_tx_params)
-        valset_update_tx = update_validator_set(valset_update_tx_params)
-        print("relayer: Valset update tx: ", valset_update_tx)
-        time.sleep(VALSET_SLEEP_TIME)
+        valset_update_tx = evm.update_validator_set(valset_update_tx_params)  # Use evm instance method
+        print("relayer: Submitted valset update tx")
+        sleep(VALSET_SLEEP_TIME)
         layer_validator_timestamp, e = get_layer_latest_validator_timestamp()
         if e:
             return e
-        blobstream_validator_timestamp = get_blobstream_validator_timestamp()
+        blobstream_validator_timestamp = evm.get_blobstream_validator_timestamp()
         print("relayer: Blobstream validator timestamp: ", blobstream_validator_timestamp)
 
     print("relayer: Blobstream valset up to date with Layer valset")
     return None
 
-def update_user_oracle_data(query_id) -> Exception:
+def update_user_oracle_data_2(evm, query_id) -> Exception:
     print("relayer: Updating oracle data...")
     oracle_proof, e = query_latest_oracle_data(query_id)
     if e:
         return e
-    current_price_data_timestamp = get_current_price_data_timestamp()
+    current_price_data_timestamp = evm.get_current_price_data_timestamp()  # Use evm instance method
     print("relayer: Current price data timestamp: ", current_price_data_timestamp)
     print("relayer: Oracle proof: ", oracle_proof)
     if int(oracle_proof["attestation_data"]["timestamp"]) > int(current_price_data_timestamp):
         print("relayer: New oracle data available, updating...")
-        oracle_update_tx_params = transform_oracle_update_params(oracle_proof)
-        print("relayer: Oracle update tx params: ", oracle_update_tx_params)
-        tx_hash, e = update_oracle_data(oracle_update_tx_params)
-        if e:
-            return e
-        print("relayer: Oracle data updated: ", tx_hash.hex())
-    else:
-        print("relayer: No new oracle data available")
+        
     return None
 
 def check_layer_chain_status() -> Exception:
-    # check if email password is set
     if os.getenv("EMAIL_PASSWORD") is None:
         return None
     message, e = get_layer_chain_status()
@@ -138,4 +259,22 @@ def check_layer_chain_status() -> Exception:
             return e
     return None
 
-start_relayer()
+def handle_validator_set_update(evm) -> Exception:
+    layer_validator_timestamp, e = get_layer_latest_validator_timestamp()
+    if e:
+        print("relayer: Error getting latest Layer validator timestamp: ", e)
+        return e
+    print("relayer: Layer validator timestamp: ", layer_validator_timestamp)
+    blobstream_validator_timestamp = evm.get_blobstream_validator_timestamp()
+    print("relayer: Blobstream validator timestamp: ", blobstream_validator_timestamp)
+    if int(blobstream_validator_timestamp) < int(layer_validator_timestamp):
+        print("relayer: Updating to latest Layer validator set...")
+        e = update_to_latest_layer_validator_set(evm, blobstream_validator_timestamp, layer_validator_timestamp)
+        if e:
+            print("relayer: Error updating to latest Layer validator set: ", e)
+            return e
+
+def sleep(seconds):
+    print("relayer: Sleeping for ", seconds, " seconds")
+    time.sleep(seconds)
+    return None
