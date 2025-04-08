@@ -185,7 +185,8 @@ def tip(query_id, query_data, layer_address, layer_rpc, eth_private_key, web3_pr
 @click.option('--query-id', envvar='QUERY_ID', required=True, help='Query ID to scrape')
 @click.option('--scrape-count', type=int, default=1000, help='Number of data points to scrape')
 @click.option('--output-file', envvar='LAYER_DATA_CSV', default="data/layer_data.csv", help='Output CSV file path')
-def scrape(query_id, scrape_count, output_file):
+@click.option('--scrape-micro', is_flag=True, help='Scrape micro reports after aggregate data')
+def scrape(query_id, scrape_count, output_file, scrape_micro):
     """Scrape historical data from Layer chain"""
     # Set environment variables
     os.environ['QUERY_ID'] = query_id
@@ -194,19 +195,20 @@ def scrape(query_id, scrape_count, output_file):
 
     print("scrape: Scraping layer data to ", output_file)
 
-    scrape_layer(query_id, output_file, scrape_count)
+    scrape_layer(query_id, output_file, scrape_count, scrape_micro)
 
 @cli.command()
 @click.option('--input-file', envvar='LAYER_DATA_CSV', default="data/layer_data.csv", help='Input CSV file path')
 @click.option('--terminal-plot', is_flag=True, help='Show plot in terminal')
-def report(input_file, terminal_plot):
+@click.option('--micro', is_flag=True, help='Analyze micro reports')
+def report(input_file, terminal_plot, micro):
     """Generate reports from scraped data"""
     if not os.path.exists(input_file):
         click.echo(f"Error: Input file {input_file} does not exist")
         return
     
     print(f"Generating reports from {input_file}")
-    stats = generate_power_report(input_file, show_terminal_plot=terminal_plot)
+    stats = generate_power_report(input_file, show_terminal_plot=terminal_plot, micro_report=micro)
     print("\nReport generated in reports/power_vs_height.png")
 
 if __name__ == '__main__':
