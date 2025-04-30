@@ -1,13 +1,14 @@
-from src.layer_client import get_data_before, get_layer_connection_status, get_current_power_threshold
+from src.layer_client import get_data_before, get_layer_connection_status, get_current_power_threshold, get_reports_by_aggregate
 import os
 from dotenv import load_dotenv
 import csv
 import json
 import time
+import pandas as pd
 
 load_dotenv()
 
-def scrape_layer(query_id, output_file, scrape_count):
+def scrape_layer(query_id, output_file, scrape_count, scrape_micro):
     status, err = get_layer_connection_status()
     if err:
         print(f"layer_scraper: Error getting layer connection status: {err}")
@@ -36,9 +37,11 @@ def scrape_layer(query_id, output_file, scrape_count):
     print(f"layer_scraper: Saved metadata to {metadata_file}")
     
     scrape_layer_data(query_id, output_file, scrape_count)
+    if scrape_micro:
+        scrape_micro_reports(query_id,output_file)
 
 def scrape_layer_data(query_id, output_file, scrape_count):
-    csv_header = ["query_id", "aggregate_value", "aggregate_reporter", "reporter_power", "flagged", "index", "aggregate_report_index", "height", "micro_height", "timestamp"]
+    csv_header = ["query_id", "aggregate_value", "aggregate_reporter", "reporter_power", "flagged", "index", "height", "micro_height", "timestamp"]
     print(f"layer_scraper: Scraping layer data to {output_file}")
     print(f"layer_scraper: Query ID: {query_id}")
     print(f"layer_scraper: Scrape count: {scrape_count}")
@@ -113,4 +116,90 @@ def scrape_layer_data(query_id, output_file, scrape_count):
 
     print(f"Scraped data saved to {output_file}")
 
-# scrape_layer()
+def scrape_micro_reports(query_id: str, aggregate_data_file: str, output_file: str = None):
+    """Scrape micro reports for aggregates in aggregate_data_file"""
+    print(f"layer_scraper: Scraping micro reports for {query_id} in {aggregate_data_file}")
+    if output_file is None:
+        output_file = aggregate_data_file.replace('.csv', '_micro.csv')
+    print(f"layer_scraper: Output file: {output_file}")
+
+    # Read the layer data
+    df = pd.read_csv(aggregate_data_file)
+    
+    # Track which timestamps we've already processed
+    processed_timestamps = set()
+    if os.path.exists(output_file):
+        micro_df = pd.read_csv(output_file)
+        processed_timestamps = set(micro_df['timestamp'].unique())
+        print(f"Found {len(processed_timestamps)} already processed timestamps")
+    
+    # Setup output CSV if it doesn't exist
+    headers = ['timestamp', 'aggregate_power', 'reporter', 'power', 'consecutive_reports']
+    if not os.path.exists(output_file):
+        with open(output_file, 'w', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(headers)
+    
+    # Track reporter streaks across all timestamps
+    reporter_streaks = {}  # {reporter_address: current_streak}
+    
+    # Get latest streak counts from existing data if any
+    if processed_timestamps:
+        micro_df = pd.read_csv(output_file)
+        latest_timestamp = micro_df['timestamp'].max()
+        latest_reports = micro_df[micro_df['timestamp'] == latest_timestamp]
+        for _, row in latest_reports.iterrows():
+            reporter_streaks[row['reporter']] = row['consecutive_reports']
+    
+    # Process each unprocessed aggregate report
+    unprocessed_df = df[~df['timestamp'].isin(processed_timestamps)].sort_values('timestamp', ascending=False)
+    print(f"Processing {len(unprocessed_df)} new aggregate reports")
+    
+    for _, row in unprocessed_df.iterrows():
+        print(f"layer_scraper: Processing aggregate at timestamp {row['timestamp']}")
+        timestamp = row['timestamp']
+        aggregate_power = row['reporter_power']
+        
+        # Get micro reports for this aggregate
+        micro_reports_response, err = get_reports_by_aggregate(query_id, int(timestamp))
+        if err:
+            print(f"Error getting reports by aggregate: {err}")
+            continue
+            
+        # Prepare all rows for this timestamp
+        timestamp_rows = []
+        participating_reporters = set()
+        
+        # Process each micro report
+        for report in micro_reports_response['microReports']:
+            reporter = report['reporter']
+            participating_reporters.add(reporter)
+            
+            # Update streak
+            if reporter in reporter_streaks:
+                reporter_streaks[reporter] += 1
+            else:
+                reporter_streaks[reporter] = 1
+                
+            # Add row to batch
+            timestamp_rows.append([
+                timestamp,
+                aggregate_power,
+                reporter,
+                report['power'],
+                reporter_streaks[reporter]
+            ])
+        
+        # Reset streaks for non-participating reporters
+        for reporter in list(reporter_streaks.keys()):
+            if reporter not in participating_reporters:
+                reporter_streaks[reporter] = 0
+        
+        # Write all rows for this timestamp atomically
+        with open(output_file, 'a', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerows(timestamp_rows)
+        
+        print(f"Wrote {len(timestamp_rows)} micro reports for timestamp {timestamp}")
+    
+    print(f"Micro report data saved to {output_file}")

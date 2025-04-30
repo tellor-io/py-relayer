@@ -127,6 +127,18 @@ def get_data_before(query_id: str, timestamp_before: int) -> tuple[dict, Excepti
         print(f"layer_client: Error getting data before: {e}")
         return None, e
     
+def get_reports_by_aggregate(query_id: str, timestamp: int) -> tuple[dict, Exception]:
+    query_id = strip_0x(query_id)
+    swagger_endpoint = os.getenv("LAYER_SWAGGER_ENDPOINT")
+    request = f"{swagger_endpoint}/tellor-io/layer/oracle/get_reports_by_aggregate/{query_id}/{timestamp}?pagination.limit=10000"
+    print(f"layer_client: Request: {request}")
+    try:
+        response = requests.get(request)
+        return response.json(), None
+    except Exception as e:
+        print(f"layer_client: Error getting reports by aggregate: {e}")
+        return None, e
+    
 def get_current_aggregate_report(query_id: str) -> tuple[dict, Exception]:
     query_id = strip_0x(query_id)
     swagger_endpoint = os.getenv("LAYER_SWAGGER_ENDPOINT")
@@ -301,7 +313,7 @@ def query_validator_set_update(given_timestamp: int) -> tuple[dict, Exception]:
     return valset_update_params, None
 
 def get_blobstream_init_params() -> tuple[dict, Exception]:
-    first_timestamp, e = get_validator_timestamp_by_index(0)
+    first_timestamp, e = get_current_validator_set_timestamp()
     if e:
         return None, e
     checkpoint_params, e = get_validator_checkpoint_params(first_timestamp.get("timestamp"))
