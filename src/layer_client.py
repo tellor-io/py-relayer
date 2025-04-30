@@ -313,7 +313,7 @@ def query_validator_set_update(given_timestamp: int) -> tuple[dict, Exception]:
     return valset_update_params, None
 
 def get_blobstream_init_params() -> tuple[dict, Exception]:
-    first_timestamp, e = get_validator_timestamp_by_index(0)
+    first_timestamp, e = get_current_validator_set_timestamp()
     if e:
         return None, e
     checkpoint_params, e = get_validator_checkpoint_params(first_timestamp.get("timestamp"))

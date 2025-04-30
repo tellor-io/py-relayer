@@ -24,8 +24,8 @@ class SimpleLayerUserAdapter(ContractAdapter):
         signatures = oracle_data.get("sigs")
         
         # Add user-specific timestamps
-        user_trigger_timestamp = int(time.time())
-        begin_relay_timestamp = user_data.get("begin_relay_timestamp", user_trigger_timestamp)
+        begin_relay_timestamp = int(time.time())
+        user_trigger_timestamp = user_data.get("user_trigger_timestamp")
         
         return {
             "attestation_data": attestation_data,
@@ -36,6 +36,12 @@ class SimpleLayerUserAdapter(ContractAdapter):
         }
     
     def update_oracle_data(self, contract, params):
+        print(f"SimpleLayerUserAdapter: Calling updateOracleData with params:")
+        print(f"  attestation_data: {type(params['attestation_data'])}")
+        print(f"  current_validator_set: {type(params['current_validator_set'])}")
+        print(f"  signatures: {type(params['signatures'])}")
+        print(f"  user_trigger_timestamp: {params['user_trigger_timestamp']}")
+        print(f"  begin_relay_timestamp: {params['begin_relay_timestamp']}")
         return contract.functions.updateOracleData(
             params["attestation_data"],
             params["current_validator_set"],

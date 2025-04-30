@@ -174,8 +174,8 @@ def start_relayer():
                 continue
             
             # Update oracle data
-            begin_relay_timestamp = int(time.time())
-            user_data = {"begin_relay_timestamp": begin_relay_timestamp}
+            user_trigger_timestamp = int(time.time())
+            user_data = {"user_trigger_timestamp": user_trigger_timestamp}
             
             tx_hash, error = update_user_oracle_data(query_id, contract_type, user_data)
             if error:
