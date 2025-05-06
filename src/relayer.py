@@ -116,6 +116,7 @@ def update_user_oracle_data(query_id=None, contract_type="SimpleLayerUser", user
     if query_id is None:
         query_id = os.getenv("QUERY_ID")
     
+    just_print = os.getenv("JUST_PRINT", "False").lower() == "true"
     print(f"relayer: Updating oracle data for query ID {query_id} using {contract_type} contract...")
     
     # Initialize EVM client
@@ -130,6 +131,10 @@ def update_user_oracle_data(query_id=None, contract_type="SimpleLayerUser", user
     if error:
         print(f"relayer: Error getting oracle data: {error}")
         return None, error
+    
+    if just_print:
+        format_for_etherscan(oracle_data["oracle_attestation_data"], oracle_data["current_validator_set"], oracle_data["sigs"])
+        return None, None
     
     # Update oracle data using the appropriate contract
     result = evm.update_oracle_data(oracle_data, contract_type, user_data)
@@ -278,3 +283,35 @@ def sleep(seconds):
     print("relayer: Sleeping for ", seconds, " seconds")
     time.sleep(seconds)
     return None
+
+def format_for_etherscan(attest_data, validator_set, sigs):
+    # Format _attestData
+    query_id = "0x" + attest_data['queryId'].hex()
+    report = attest_data['report']
+    value = "0x" + report['value'].hex()
+    
+    report_formatted = f'["{value}","{report["timestamp"]}","{report["aggregatePower"]}","{report["previousTimestamp"]}","{report["nextTimestamp"]}","{report["lastConsensusTimestamp"]}"]'
+    
+    # Format _currentValidatorSet
+    validators_formatted = "[" + ",".join(f'["{v["addr"]}","{v["power"]}"]' for v in validator_set) + "]"
+    
+    # Format _sigs
+    sigs_formatted = "[" + ",".join(
+        f'["{sig["v"]}","0x{sig["r"].hex()}","0x{sig["s"].hex()}"]' 
+        for sig in sigs
+    ) + "]"
+    
+    print("\n\n\n\n")
+    print("===== START OF FORMATTED PARAMETERS FOR ETHERSCAN =====")
+    print("\n1. _attestData (tuple):")
+    print(f"1a. queryId:")
+    print(query_id)
+    print(f"1b. report (tuple):")
+    print(report_formatted)
+    print(f"1c. attestationTimestamp:")
+    print(attest_data['attestationTimestamp'])
+    print("\n2. _currentValidatorSet (tuple[]):")
+    print(validators_formatted)
+    print("\n3. _sigs (tuple[]):")
+    print(sigs_formatted)
+    print("\n===== END OF FORMATTED PARAMETERS FOR ETHERSCAN =====\n\n\n\n")
