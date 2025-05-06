@@ -26,8 +26,9 @@ def cli():
 @click.option('--layer-rpc', envvar='LAYER_RPC_ENDPOINT', help='Layer RPC endpoint')
 @click.option('--contract-type', type=click.Choice(['SimpleLayerUser', 'TestPriceFeedUser']), 
               default='SimpleLayerUser', help='Type of contract to use for relaying')
+@click.option('--just-print', is_flag=True, help='Just print the oracle data parameters without submitting transaction')
 def relay(query_id, sleep_time, eth_private_key, web3_provider, layer_swagger, layer_rpc, 
-          blobstream_address, layer_user_address, layer_test_user_address, contract_type):
+          blobstream_address, layer_user_address, layer_test_user_address, contract_type, just_print):
     """Start the relayer process"""
     # Set environment variables
     if eth_private_key:
@@ -50,6 +51,7 @@ def relay(query_id, sleep_time, eth_private_key, web3_provider, layer_swagger, l
         os.environ['SLEEP_TIME'] = str(sleep_time)
     
     os.environ['CONTRACT_TYPE'] = contract_type
+    os.environ['JUST_PRINT'] = str(just_print)
     
     start_relayer()
 
