@@ -133,15 +133,6 @@ def update_user_oracle_data(query_id=None, contract_type="SimpleLayerUser", user
         return None, error
     
     if just_print:
-        print("\n=== Oracle Data Parameters for Manual Transaction ===")
-        print("Contract Address:", os.getenv("LAYER_USER_CONTRACT_ADDRESS"))
-        print("Function: updateOracleData")
-        print("\nParameters:")
-        print("_attestData:", oracle_data["oracle_attestation_data"])
-        print("_currentValidatorSet:", oracle_data["current_validator_set"])
-        print("_sigs:", oracle_data["sigs"])
-        print("\nNote: Format these parameters according to your contract's expected input format")
-        print("===============================================\n")
         format_for_etherscan(oracle_data["oracle_attestation_data"], oracle_data["current_validator_set"], oracle_data["sigs"])
         return None, None
     
@@ -310,7 +301,8 @@ def format_for_etherscan(attest_data, validator_set, sigs):
         for sig in sigs
     ) + "]"
     
-    print("\n=== Formatted Parameters for Etherscan ===")
+    print("\n\n\n\n")
+    print("===== START OF FORMATTED PARAMETERS FOR ETHERSCAN =====")
     print("\n1. _attestData (tuple):")
     print(f"1a. queryId:")
     print(query_id)
@@ -322,3 +314,4 @@ def format_for_etherscan(attest_data, validator_set, sigs):
     print(validators_formatted)
     print("\n3. _sigs (tuple[]):")
     print(sigs_formatted)
+    print("\n===== END OF FORMATTED PARAMETERS FOR ETHERSCAN =====\n\n\n\n")
