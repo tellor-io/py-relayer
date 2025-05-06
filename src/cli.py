@@ -20,15 +20,14 @@ def cli():
 @click.option('--eth-private-key', envvar='ETH_PRIVATE_KEY', help='Ethereum private key')
 @click.option('--blobstream-address', envvar='BLOBSTREAM_CONTRACT_ADDRESS', help='Blobstream contract address')
 @click.option('--layer-user-address', envvar='LAYER_USER_CONTRACT_ADDRESS', help='Layer user contract address')
-@click.option('--layer-test-user-address', envvar='LAYER_TEST_USER_CONTRACT_ADDRESS', help='Layer test user contract address')
 @click.option('--web3-provider', envvar='WEB3_PROVIDER_URL', help='Web3 provider URL')
 @click.option('--layer-swagger', envvar='LAYER_SWAGGER_ENDPOINT', help='Layer swagger endpoint')
 @click.option('--layer-rpc', envvar='LAYER_RPC_ENDPOINT', help='Layer RPC endpoint')
-@click.option('--contract-type', type=click.Choice(['SimpleLayerUser', 'TestPriceFeedUser']), 
+@click.option('--contract-type', type=click.Choice(['SimpleLayerUser', 'TestPriceFeedUser', 'YoloTellorUser']), 
               default='SimpleLayerUser', help='Type of contract to use for relaying')
 @click.option('--just-print', is_flag=True, help='Just print the oracle data parameters without submitting transaction')
 def relay(query_id, sleep_time, eth_private_key, web3_provider, layer_swagger, layer_rpc, 
-          blobstream_address, layer_user_address, layer_test_user_address, contract_type, just_print):
+          blobstream_address, layer_user_address, contract_type, just_print):
     """Start the relayer process"""
     # Set environment variables
     if eth_private_key:
@@ -43,8 +42,6 @@ def relay(query_id, sleep_time, eth_private_key, web3_provider, layer_swagger, l
         os.environ['BLOBSTREAM_CONTRACT_ADDRESS'] = blobstream_address
     if layer_user_address:
         os.environ['LAYER_USER_CONTRACT_ADDRESS'] = layer_user_address
-    if layer_test_user_address:
-        os.environ['LAYER_TEST_USER_CONTRACT_ADDRESS'] = layer_test_user_address
     if query_id:
         os.environ['QUERY_ID'] = query_id
     if sleep_time:
@@ -147,13 +144,12 @@ def relay_bridge(withdraw_id, eth_private_key, web3_provider, layer_swagger, blo
 @click.option('--eth-private-key', envvar='ETH_PRIVATE_KEY', help='Ethereum private key')
 @click.option('--blobstream-address', envvar='BLOBSTREAM_CONTRACT_ADDRESS', help='Blobstream contract address')
 @click.option('--layer-user-address', envvar='LAYER_USER_CONTRACT_ADDRESS', help='Layer user contract address')
-@click.option('--layer-test-user-address', envvar='LAYER_TEST_USER_CONTRACT_ADDRESS', help='Layer test user contract address')
 @click.option('--web3-provider', envvar='WEB3_PROVIDER_URL', help='Web3 provider URL')
 @click.option('--layer-swagger', envvar='LAYER_SWAGGER_ENDPOINT', help='Layer swagger endpoint')
 @click.option('--contract-type', envvar='CONTRACT_TYPE', type=click.Choice(['SimpleLayerUser', 'TestPriceFeedUser']), default='SimpleLayerUser', 
               help='Type of contract to use for relaying')
 def tip(query_id, query_data, layer_address, layer_rpc, eth_private_key, web3_provider, layer_swagger, 
-        blobstream_address, layer_user_address, layer_test_user_address, contract_type, sleep_time):
+        blobstream_address, layer_user_address, contract_type, sleep_time):
     """Start the tipper process"""
     # Set environment variables
     if query_id:
@@ -174,8 +170,6 @@ def tip(query_id, query_data, layer_address, layer_rpc, eth_private_key, web3_pr
         os.environ['BLOBSTREAM_CONTRACT_ADDRESS'] = blobstream_address
     if layer_user_address:
         os.environ['LAYER_USER_CONTRACT_ADDRESS'] = layer_user_address
-    if layer_test_user_address:
-        os.environ['LAYER_TEST_USER_CONTRACT_ADDRESS'] = layer_test_user_address
     if contract_type:
         os.environ['CONTRACT_TYPE'] = contract_type
     if sleep_time:

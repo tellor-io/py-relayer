@@ -15,7 +15,7 @@ class EVMClient:
         self.blobstream_contract = None
         self.layer_user_contract = None
         self.token_bridge_contract = None
-        self.layer_test_user_contract = None
+        # self.layer_test_user_contract = None
 
     def init_web3(self):
         provider_url = os.getenv("WEB3_PROVIDER_URL")
@@ -55,11 +55,18 @@ class EVMClient:
         print("evm_client: Token bridge contract: ", self.token_bridge_contract.address)
 
     def setup_layer_test_user_contract(self):
-        layer_test_user_address = os.getenv("LAYER_TEST_USER_CONTRACT_ADDRESS")
+        layer_user_address = os.getenv("LAYER_USER_CONTRACT_ADDRESS")
         with open("abis/TestPriceFeedUser.json") as f:
             abi = json.load(f)["abi"]
-        self.layer_test_user_contract = self.web3_instance.eth.contract(address=layer_test_user_address, abi=abi)
-        print("evm_client: Layer test user contract: ", self.layer_test_user_contract.address)
+        self.layer_user_contract = self.web3_instance.eth.contract(address=layer_user_address, abi=abi)
+        print("evm_client: Layer user contract: ", self.layer_user_contract.address)
+
+    def setup_yolo_tellor_user_contract(self):
+        layer_user_address = os.getenv("LAYER_USER_CONTRACT_ADDRESS")
+        with open("abis/YoloTellorUser.json") as f:
+            abi = json.load(f)["abi"]
+        self.layer_user_contract = self.web3_instance.eth.contract(address=layer_user_address, abi=abi)
+        print("evm_client: Layer user contract: ", self.layer_user_contract.address)
 
     def get_web3_instance(self):
         return self.web3_instance
@@ -141,43 +148,37 @@ class EVMClient:
             return None
 
     def update_oracle_data(self, oracle_update_params, contract_type="SimpleLayerUser", user_data=None):
-        """
-        Update oracle data using the appropriate contract adapter
-        
-        Args:
-            oracle_update_params: The oracle data parameters
-            contract_type: The type of contract to use (SimpleLayerUser, TestPriceFeedUser, etc.)
-            user_data: Additional user-specific data needed by the adapter
-        
-        Returns:
-            tuple: (tx_hash, error)
-        """
-        from src.contract_adapters import get_contract_adapter
-        
-        print(f"evm_client: Updating oracle data using {contract_type} contract...")
-        
-        # Get the appropriate contract based on type
-        if contract_type == "SimpleLayerUser":
-            if not self.layer_user_contract:
-                self.setup_layer_user_contract()
-            contract = self.layer_user_contract
-        elif contract_type == "TestPriceFeedUser":
-            if not self.layer_test_user_contract:
-                self.setup_layer_test_user_contract()
-            contract = self.layer_test_user_contract
-        else:
-            return None, f"Unsupported contract type: {contract_type}"
-        
-        # Get the appropriate adapter
-        adapter = get_contract_adapter(contract_type)
-        if not adapter:
-            return None, f"No adapter found for contract type: {contract_type}"
-        
-        # Prepare parameters and build transaction
-        if user_data is None:
-            user_data = {"begin_relay_timestamp": int(time.time())}
-        
+        """Update oracle data in the appropriate contract"""
         try:
+            contract_address = os.getenv("LAYER_USER_CONTRACT_ADDRESS")
+            if not contract_address:
+                return None, "LAYER_USER_CONTRACT_ADDRESS not set"
+            
+            # Get the appropriate contract based on type
+            if contract_type == "SimpleLayerUser":
+                if not self.layer_user_contract:
+                    self.setup_layer_user_contract()
+                contract = self.layer_user_contract
+            elif contract_type == "TestPriceFeedUser":
+                if not self.layer_user_contract:
+                    self.setup_layer_test_user_contract()
+                contract = self.layer_user_contract
+            elif contract_type == "YoloTellorUser":
+                if not self.layer_user_contract:
+                    self.setup_yolo_tellor_user_contract()
+                contract = self.layer_user_contract
+            else:
+                return None, f"Unsupported contract type: {contract_type}"
+            
+            # Get the appropriate adapter
+            adapter = get_contract_adapter(contract_type)
+            if not adapter:
+                return None, f"No adapter found for contract type: {contract_type}"
+            
+            # Prepare parameters and build transaction
+            if user_data is None:
+                user_data = {"begin_relay_timestamp": int(time.time())}
+            
             params = adapter.prepare_update_params(oracle_update_params, user_data)
             
             # Build and send transaction

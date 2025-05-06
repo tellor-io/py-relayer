@@ -104,11 +104,59 @@ class TestPriceFeedUserAdapter(ContractAdapter):
             params["init_timestamp"]
         )
 
+class YoloTellorUserAdapter(ContractAdapter):
+    """Adapter for YoloTellorUser contract"""
+    
+    def prepare_update_params(self, oracle_data, user_data=None):
+        """
+        Transform oracle data into YoloTellorUser contract parameters
+        
+        Args:
+            oracle_data: The oracle data from the Layer chain
+            user_data: Additional user-specific data
+        """
+       # Extract standard parameters
+        attestation_data = oracle_data.get("oracle_attestation_data")
+        current_validator_set = oracle_data.get("current_validator_set")
+        signatures = oracle_data.get("sigs")
+        
+        # No user-specific args needed for YoloTellorUser
+
+        return {
+            "attestation_data": attestation_data,
+            "current_validator_set": current_validator_set,
+            "signatures": signatures
+        }
+    
+    def update_oracle_data(self, contract, params):
+        """
+        Call the updateOracleData function on the YoloTellorUser contract
+        
+        Args:
+            contract: The contract instance
+            params: The parameters for the function
+        
+        Returns:
+            ContractFunction: The contract function to call
+        """
+        # Print parameters for debugging
+        print(f"YoloTellorUserAdapter: Calling updateOracleData with params:")
+        print(f"  attestation_data: {type(params['attestation_data'])}")
+        print(f"  current_validator_set: {type(params['current_validator_set'])}")
+        print(f"  signatures: {type(params['signatures'])}")
+        
+        return contract.functions.updateOracleData(
+            params["attestation_data"],
+            params["current_validator_set"],
+            params["signatures"]
+        )
+
 # Factory to get the appropriate adapter
 def get_contract_adapter(contract_type):
     adapters = {
         "SimpleLayerUser": SimpleLayerUserAdapter(),
-        "TestPriceFeedUser": TestPriceFeedUserAdapter()
+        "TestPriceFeedUser": TestPriceFeedUserAdapter(),
+        "YoloTellorUser": YoloTellorUserAdapter()
     }
     
     return adapters.get(contract_type, None) 
