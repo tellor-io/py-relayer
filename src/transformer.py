@@ -4,7 +4,7 @@ from hashlib import sha256
 from eth_keys import keys
 from eth_utils import decode_hex
 
-def transform_blobstream_init_params(checkpoint_params: dict) -> dict:
+def transform_data_bridge_init_params(checkpoint_params: dict) -> dict:
     init_params = {
         "power_threshold": int(checkpoint_params.get("power_threshold")),
         "validator_timestamp": int(checkpoint_params.get("timestamp")),
@@ -13,7 +13,7 @@ def transform_blobstream_init_params(checkpoint_params: dict) -> dict:
     }
     return init_params
 
-def transform_blobstream_reset_params(checkpoint_params: dict) -> dict:
+def transform_data_bridge_reset_params(checkpoint_params: dict) -> dict:
     reset_params = {
         "power_threshold": int(checkpoint_params.get("power_threshold")),
         "validator_timestamp": int(checkpoint_params.get("timestamp")),

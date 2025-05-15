@@ -12,7 +12,7 @@ class EVMClient:
     def __init__(self):
         self.web3_instance = None
         self.web3_acct = None
-        self.blobstream_contract = None
+        self.data_bridge_contract = None
         self.layer_user_contract = None
         self.token_bridge_contract = None
         # self.layer_test_user_contract = None
@@ -33,12 +33,12 @@ class EVMClient:
         print("evm_client: Using address: ", self.web3_instance.eth.defaultAccount)
         print("evm_client: Current block number: ", self.web3_instance.eth.block_number)
 
-    def setup_blobstream_contract(self):
-        blobstream_address = os.getenv("BLOBSTREAM_CONTRACT_ADDRESS")
-        with open("abis/BlobstreamOTestnet.json") as f:
+    def setup_data_bridge_contract(self):
+        data_bridge_address = os.getenv("DATA_BRIDGE_CONTRACT_ADDRESS")
+        with open("abis/TellorDataBridgeTestnet.json") as f:
             abi = json.load(f)["abi"]
-        self.blobstream_contract = self.web3_instance.eth.contract(address=blobstream_address, abi=abi)
-        print("evm_client: Blobstream contract: ", self.blobstream_contract.address)
+        self.data_bridge_contract = self.web3_instance.eth.contract(address=data_bridge_address, abi=abi)
+        print("evm_client: Data bridge contract: ", self.data_bridge_contract.address)
 
     def setup_layer_user_contract(self):
         layer_user_address = os.getenv("LAYER_USER_CONTRACT_ADDRESS")
@@ -71,10 +71,10 @@ class EVMClient:
     def get_web3_instance(self):
         return self.web3_instance
 
-    def get_blobstream_validator_timestamp(self):
-        if not self.blobstream_contract:
-            raise Exception("Blobstream contract not initialized")
-        return self.blobstream_contract.functions.validatorTimestamp().call()
+    def get_data_bridge_validator_timestamp(self):
+        if not self.data_bridge_contract:
+            raise Exception("Data bridge contract not initialized")
+        return self.data_bridge_contract.functions.validatorTimestamp().call()
 
     def get_current_price_data_timestamp(self):
         print("evm_client: Getting current price data...")
@@ -85,12 +85,12 @@ class EVMClient:
         timestamp = price_data[1] # timestamp
         return timestamp
 
-    def init_blobstream(self, init_tx_params):
-        print("evm_client: Initializing Blobstream...")
+    def init_data_bridge(self, init_tx_params):
+        print("evm_client: Initializing Data bridge...")
         print("evm_client: Init tx params: ", init_tx_params)
         try:
             # Build the transaction
-            tx = self.blobstream_contract.functions.init(
+            tx = self.data_bridge_contract.functions.init(
                 init_tx_params["power_threshold"], 
                 init_tx_params["validator_timestamp"], 
                 init_tx_params["unbonding_period"], 
@@ -113,12 +113,12 @@ class EVMClient:
             print("evm_client: Tx hash: ", tx_hash.hex())
             return tx_hash
         except Exception as e:
-            print("evm_client: Error initializing Blobstream: ", e)
+            print("evm_client: Error initializing Data bridge: ", e)
             return None
  
     def read_deployer_address(self):
         print("evm_client: Reading deployer address...")
-        deployer_address = self.blobstream_contract.functions.deployer().call()
+        deployer_address = self.data_bridge_contract.functions.deployer().call()
         print("evm_client: Deployer address: ", deployer_address)
         return deployer_address
 
@@ -126,7 +126,7 @@ class EVMClient:
         print("evm_client: Updating validator set...")
         print("evm_client: Update tx params: ", update_tx_params)
         try:
-            tx = self.blobstream_contract.functions.updateValidatorSet(
+            tx = self.data_bridge_contract.functions.updateValidatorSet(
                 update_tx_params["new_validator_set_hash"],
                 update_tx_params["new_power_threshold"],
                 update_tx_params["new_validator_timestamp"],
@@ -198,11 +198,11 @@ class EVMClient:
             print(f"evm_client: Error updating oracle data: {e}")
             return None, str(e)
 
-    def reset_blobstream(self, reset_tx_params):
-        print("evm_client: Resetting Blobstream...")
+    def reset_data_bridge(self, reset_tx_params):
+        print("evm_client: Resetting Data bridge...")
         print("evm_client: Reset tx params: ", reset_tx_params)
         try:
-            tx = self.blobstream_contract.functions.guardianResetValidatorSet(
+            tx = self.data_bridge_contract.functions.guardianResetValidatorSet(
                 reset_tx_params["power_threshold"],
                 reset_tx_params["validator_timestamp"],
                 reset_tx_params["validator_set_checkpoint"]
@@ -218,14 +218,14 @@ class EVMClient:
             print("evm_client: Tx hash: ", tx_hash.hex())
             return tx_hash
         except Exception as e:
-            print("evm_client: Error resetting Blobstream: ", e)
+            print("evm_client: Error resetting Data bridge: ", e)
             return None
 
-    def reset_blobstream_testnet(self, reset_tx_params):
-        print("evm_client: Resetting Blobstream...")
+    def reset_data_bridge_testnet(self, reset_tx_params):
+        print("evm_client: Resetting Data bridge...")
         print("evm_client: Reset tx params: ", reset_tx_params)
         try:
-            tx = self.blobstream_contract.functions.guardianResetValidatorSetTestnet(
+            tx = self.data_bridge_contract.functions.guardianResetValidatorSetTestnet(
                 reset_tx_params["power_threshold"],
                 reset_tx_params["validator_timestamp"],
                 reset_tx_params["validator_set_checkpoint"]
@@ -241,7 +241,7 @@ class EVMClient:
             print("evm_client: Tx hash: ", tx_hash.hex())
             return tx_hash
         except Exception as e:
-            print("evm_client: Error resetting Blobstream: ", e)
+            print("evm_client: Error resetting TellorDataBridge: ", e)
             return None
     
     def withdraw_from_layer(self, params: dict):

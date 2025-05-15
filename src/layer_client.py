@@ -232,15 +232,14 @@ def get_oracle_proof(query_id: str, timestamp: int) -> tuple[dict, Exception]:
         threshold
     )
     if not sufficient_power:
-        retry_sleep_time = 3
+        retry_sleep_time = 2
         retry_count = 0
-        while retry_count < 3:
+        while retry_count < 5:
             print(f"layer_client: Insufficient attestation power, sleeping for {retry_sleep_time} seconds")
             time.sleep(retry_sleep_time)
             attestations, e = get_attestations_by_snapshot(last_snapshot)
             if e:
                 return None, e
-            retry_count += 1
             sufficient_power = get_sufficient_attestation_power(
                 attestations.get("attestations"), 
                 current_validator_set.get("bridge_validator_set"), 
@@ -248,6 +247,7 @@ def get_oracle_proof(query_id: str, timestamp: int) -> tuple[dict, Exception]:
             )
             if sufficient_power:
                 break
+            retry_count += 1
             retry_sleep_time = int(retry_sleep_time * 1.5)
         if not sufficient_power:
             return None, Exception("layer_client: Insufficient attestation power")
@@ -312,7 +312,7 @@ def query_validator_set_update(given_timestamp: int) -> tuple[dict, Exception]:
     }
     return valset_update_params, None
 
-def get_blobstream_init_params() -> tuple[dict, Exception]:
+def get_data_bridge_init_params() -> tuple[dict, Exception]:
     first_timestamp, e = get_current_validator_set_timestamp()
     if e:
         return None, e
@@ -321,7 +321,7 @@ def get_blobstream_init_params() -> tuple[dict, Exception]:
         return None, e
     return checkpoint_params, None
 
-def get_blobstream_reset_params() -> tuple[dict, Exception]:
+def get_data_bridge_reset_params() -> tuple[dict, Exception]:
     latest_timestamp, e = get_layer_latest_validator_timestamp()
     checkpoint_params, e = get_validator_checkpoint_params(latest_timestamp)
     if e:

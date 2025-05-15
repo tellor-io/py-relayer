@@ -1,7 +1,7 @@
 import click
 from dotenv import load_dotenv
 import os
-from src.relayer import start_relayer, blobstream_init, blobstream_reset, update_user_oracle_data
+from src.relayer import start_relayer, data_bridge_init, data_bridge_reset, update_user_oracle_data
 from src.bridge_client import relay_withdraw
 from src.evm_client import EVMClient
 from src.tipper import start_tipper
@@ -18,7 +18,7 @@ def cli():
 @click.option('--query-id', envvar='QUERY_ID', help='Query ID to relay')
 @click.option('--sleep-time', envvar='SLEEP_TIME', type=int, default=600, help='Sleep time between relays in seconds')
 @click.option('--eth-private-key', envvar='ETH_PRIVATE_KEY', help='Ethereum private key')
-@click.option('--blobstream-address', envvar='BLOBSTREAM_CONTRACT_ADDRESS', help='Blobstream contract address')
+@click.option('--data-bridge-address', envvar='DATA_BRIDGE_CONTRACT_ADDRESS', help='Tellor data bridge contract address')
 @click.option('--layer-user-address', envvar='LAYER_USER_CONTRACT_ADDRESS', help='Layer user contract address')
 @click.option('--web3-provider', envvar='WEB3_PROVIDER_URL', help='Web3 provider URL')
 @click.option('--layer-swagger', envvar='LAYER_SWAGGER_ENDPOINT', help='Layer swagger endpoint')
@@ -27,7 +27,7 @@ def cli():
               default='SimpleLayerUser', help='Type of contract to use for relaying')
 @click.option('--just-print', is_flag=True, help='Just print the oracle data parameters without submitting transaction')
 def relay(query_id, sleep_time, eth_private_key, web3_provider, layer_swagger, layer_rpc, 
-          blobstream_address, layer_user_address, contract_type, just_print):
+          data_bridge_address, layer_user_address, contract_type, just_print):
     """Start the relayer process"""
     # Set environment variables
     if eth_private_key:
@@ -38,8 +38,8 @@ def relay(query_id, sleep_time, eth_private_key, web3_provider, layer_swagger, l
         os.environ['LAYER_SWAGGER_ENDPOINT'] = layer_swagger
     if layer_rpc:
         os.environ['LAYER_RPC_ENDPOINT'] = layer_rpc
-    if blobstream_address:
-        os.environ['BLOBSTREAM_CONTRACT_ADDRESS'] = blobstream_address
+    if data_bridge_address:
+        os.environ['DATA_BRIDGE_CONTRACT_ADDRESS'] = data_bridge_address
     if layer_user_address:
         os.environ['LAYER_USER_CONTRACT_ADDRESS'] = layer_user_address
     if query_id:
@@ -54,42 +54,42 @@ def relay(query_id, sleep_time, eth_private_key, web3_provider, layer_swagger, l
 
 @cli.command()
 @click.option('--eth-private-key', envvar='ETH_PRIVATE_KEY', required=True, help='Ethereum private key')
-@click.option('--blobstream-address', envvar='BLOBSTREAM_CONTRACT_ADDRESS', required=True, help='Blobstream contract address')
+@click.option('--data-bridge-address', envvar='DATA_BRIDGE_CONTRACT_ADDRESS', required=True, help='Tellor data bridge contract address')
 @click.option('--web3-provider', envvar='WEB3_PROVIDER_URL', required=True, help='Web3 provider URL')
 @click.option('--layer-swagger', envvar='LAYER_SWAGGER_ENDPOINT', required=True, help='Layer swagger endpoint')
-def init(eth_private_key, blobstream_address, web3_provider, layer_swagger):
-    """Initialize Blobstream contract"""
+def init(eth_private_key, data_bridge_address, web3_provider, layer_swagger):
+    """Initialize Tellor data bridge contract"""
     os.environ['ETH_PRIVATE_KEY'] = eth_private_key
-    os.environ['BLOBSTREAM_CONTRACT_ADDRESS'] = blobstream_address
+    os.environ['DATA_BRIDGE_CONTRACT_ADDRESS'] = data_bridge_address
     os.environ['WEB3_PROVIDER_URL'] = web3_provider
     os.environ['LAYER_SWAGGER_ENDPOINT'] = layer_swagger
     
     evm = EVMClient()
     evm.init_web3()
-    evm.setup_blobstream_contract()
-    error = blobstream_init(evm)
+    evm.setup_data_bridge_contract()
+    error = data_bridge_init(evm)
     if error:
-        click.echo(f"Error initializing Blobstream: {error}", err=True)
+        click.echo(f"Error initializing TellorDataBridge: {error}", err=True)
         exit(1)
 
 @cli.command()
 @click.option('--eth-private-key', envvar='ETH_PRIVATE_KEY', required=True, help='Ethereum private key')
-@click.option('--blobstream-address', envvar='BLOBSTREAM_CONTRACT_ADDRESS', required=True, help='Blobstream contract address')
+@click.option('--data-bridge-address', envvar='DATA_BRIDGE_CONTRACT_ADDRESS', required=True, help='Tellor data bridge contract address')
 @click.option('--web3-provider', envvar='WEB3_PROVIDER_URL', required=True, help='Web3 provider URL')
 @click.option('--layer-swagger', envvar='LAYER_SWAGGER_ENDPOINT', required=True, help='Layer swagger endpoint')
-def reset(eth_private_key, blobstream_address, web3_provider, layer_swagger):
-    """Reset Blobstream contract"""
+def reset(eth_private_key, data_bridge_address, web3_provider, layer_swagger):
+    """Reset Tellor data bridge contract"""
     os.environ['ETH_PRIVATE_KEY'] = eth_private_key
-    os.environ['BLOBSTREAM_CONTRACT_ADDRESS'] = blobstream_address
+    os.environ['DATA_BRIDGE_CONTRACT_ADDRESS'] = data_bridge_address
     os.environ['WEB3_PROVIDER_URL'] = web3_provider
     os.environ['LAYER_SWAGGER_ENDPOINT'] = layer_swagger
     
     evm = EVMClient()
     evm.init_web3()
-    evm.setup_blobstream_contract()
-    error = blobstream_reset(evm)
+    evm.setup_data_bridge_contract()
+    error = data_bridge_reset(evm)
     if error:
-        click.echo(f"Error resetting Blobstream: {error}", err=True)
+        click.echo(f"Error resetting Tellor data bridge: {error}", err=True)
         exit(1)
 
 @cli.command()
@@ -109,9 +109,9 @@ def update(query_id, contract_type):
 @click.option('--eth-private-key', envvar='ETH_PRIVATE_KEY', help='Ethereum private key')
 @click.option('--web3-provider', envvar='WEB3_PROVIDER_URL', help='Web3 provider URL')
 @click.option('--layer-swagger', envvar='LAYER_SWAGGER_ENDPOINT', help='Layer swagger endpoint')
-@click.option('--blobstream-address', envvar='BLOBSTREAM_CONTRACT_ADDRESS', help='Blobstream contract address')
+@click.option('--data-bridge-address', envvar='DATA_BRIDGE_CONTRACT_ADDRESS', help='Tellor data bridge contract address')
 @click.option('--token-bridge-address', envvar='TOKEN_BRIDGE_CONTRACT_ADDRESS', help='Token Bridge contract address')
-def relay_bridge(withdraw_id, eth_private_key, web3_provider, layer_swagger, blobstream_address, token_bridge_address):
+def relay_bridge(withdraw_id, eth_private_key, web3_provider, layer_swagger, data_bridge_address, token_bridge_address):
     """Relay a specific withdraw from Layer to EVM chain"""
     if eth_private_key:
         os.environ['ETH_PRIVATE_KEY'] = eth_private_key
@@ -119,8 +119,8 @@ def relay_bridge(withdraw_id, eth_private_key, web3_provider, layer_swagger, blo
         os.environ['WEB3_PROVIDER_URL'] = web3_provider
     if layer_swagger:
         os.environ['LAYER_SWAGGER_ENDPOINT'] = layer_swagger
-    if blobstream_address:
-        os.environ['BLOBSTREAM_CONTRACT_ADDRESS'] = blobstream_address
+    if data_bridge_address:
+        os.environ['DATA_BRIDGE_CONTRACT_ADDRESS'] = data_bridge_address
     if token_bridge_address:
         os.environ['TOKEN_BRIDGE_CONTRACT_ADDRESS'] = token_bridge_address
 
@@ -142,14 +142,14 @@ def relay_bridge(withdraw_id, eth_private_key, web3_provider, layer_swagger, blo
 @click.option('--sleep-time', envvar='SLEEP_TIME', type=int, default=3600, help='Sleep time between iterations in seconds')
 @click.option('--layer-rpc', envvar='LAYER_RPC_ENDPOINT', help='Layer RPC endpoint')
 @click.option('--eth-private-key', envvar='ETH_PRIVATE_KEY', help='Ethereum private key')
-@click.option('--blobstream-address', envvar='BLOBSTREAM_CONTRACT_ADDRESS', help='Blobstream contract address')
+@click.option('--data-bridge-address', envvar='DATA_BRIDGE_CONTRACT_ADDRESS', help='Tellor data bridge contract address')
 @click.option('--layer-user-address', envvar='LAYER_USER_CONTRACT_ADDRESS', help='Layer user contract address')
 @click.option('--web3-provider', envvar='WEB3_PROVIDER_URL', help='Web3 provider URL')
 @click.option('--layer-swagger', envvar='LAYER_SWAGGER_ENDPOINT', help='Layer swagger endpoint')
 @click.option('--contract-type', envvar='CONTRACT_TYPE', type=click.Choice(['SimpleLayerUser', 'TestPriceFeedUser']), default='SimpleLayerUser', 
               help='Type of contract to use for relaying')
 def tip(query_id, query_data, layer_address, layer_rpc, eth_private_key, web3_provider, layer_swagger, 
-        blobstream_address, layer_user_address, contract_type, sleep_time):
+        data_bridge_address, layer_user_address, contract_type, sleep_time):
     """Start the tipper process"""
     # Set environment variables
     if query_id:
@@ -166,8 +166,8 @@ def tip(query_id, query_data, layer_address, layer_rpc, eth_private_key, web3_pr
         os.environ['WEB3_PROVIDER_URL'] = web3_provider
     if layer_swagger:
         os.environ['LAYER_SWAGGER_ENDPOINT'] = layer_swagger
-    if blobstream_address:
-        os.environ['BLOBSTREAM_CONTRACT_ADDRESS'] = blobstream_address
+    if data_bridge_address:
+        os.environ['DATA_BRIDGE_CONTRACT_ADDRESS'] = data_bridge_address
     if layer_user_address:
         os.environ['LAYER_USER_CONTRACT_ADDRESS'] = layer_user_address
     if contract_type:
