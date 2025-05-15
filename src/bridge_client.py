@@ -7,8 +7,6 @@ from src.relayer import handle_validator_set_update
 import time
 import os
 
-withdraws_list = []
-highest_withdraw_id = 0
 withdraw_delay = 43200 # seconds
 max_attestation_age = 43200 # seconds
 withdraw_id_to_relay = int(os.getenv("WITHDRAW_ID"))
@@ -86,5 +84,3 @@ def get_withdraw_query_id(withdraw_id: int) -> str:
     query_data = encode(["string", "bytes"], ["TRBBridge", query_data_args])
     query_id = Web3.keccak(query_data)
     return query_id.hex()
-
-# relay_withdraw(withdraw_id_to_relay)

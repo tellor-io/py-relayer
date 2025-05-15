@@ -1,5 +1,4 @@
 from web3 import Web3, Account
-from web3.types import HexBytes
 import json
 import os
 from dotenv import load_dotenv
