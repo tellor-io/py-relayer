@@ -116,7 +116,7 @@ def update_user_oracle_data(query_id=None, contract_type="SimpleLayerUser", user
     if query_id is None:
         query_id = os.getenv("QUERY_ID")
     
-    just_print = os.getenv("JUST_PRINT", "False").lower() == "true"
+    just_print = os.getenv("JUST_PRINT", "false").lower() == "true"
     print(f"relayer: Updating oracle data for query ID {query_id} using {contract_type} contract...")
     
     # Initialize EVM client
