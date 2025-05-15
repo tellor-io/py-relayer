@@ -13,19 +13,6 @@ withdraw_delay = 43200 # seconds
 max_attestation_age = 43200 # seconds
 withdraw_id_to_relay = int(os.getenv("WITHDRAW_ID"))
 
-# use statuses to try next 10 withdraw ids
-# and to increment "lowest pending withdraw id"
-def relay_next_withdraw() -> (Exception):
-    global highest_withdraw_id
-    withdraw_id = highest_withdraw_id + 1
-    status, e = relay_withdraw(withdraw_id)
-    if e:
-        print("bridge_client: Error relaying withdraw: ", e)
-        return e
-    if status == 1 or status == 2:
-        highest_withdraw_id = highest_withdraw_id + 1
-    return None
-
 # things to check:
 # 	- withdrawal id __exists__
 # 	- report timestamp __old enough__
@@ -35,7 +22,7 @@ def relay_withdraw(withdraw_id) -> (int, Exception):
     print("bridge_client: Relaying withdraw: ", withdraw_id)
     evm = EVMClient()
     evm.init_web3()
-    evm.setup_blobstream_contract()
+    evm.setup_data_bridge_contract()
     evm.setup_token_bridge_contract()
     
     withdraw_query_id = get_withdraw_query_id(withdraw_id)
@@ -78,12 +65,6 @@ def relay_withdraw(withdraw_id) -> (int, Exception):
         return None, Exception("Failed to withdraw from layer")
     print("bridge_client: Oracle data updated: ", tx_hash.hex())
     return 2, None
-
-def get_list_of_pending_withdraws():
-    next_withdraw_id = highest_withdraw_id + 1
-    append_list = fill_list_until_error(next_withdraw_id)
-    if len(append_list) > 0:
-        withdraws_list.extend(append_list)
 
 def fill_list_until_error(next_withdraw_id):
     append_list = []

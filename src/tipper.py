@@ -33,7 +33,7 @@ def start_tipper():
     # Initialize EVM client
     evm = EVMClient()
     evm.init_web3()
-    evm.setup_blobstream_contract()
+    evm.setup_data_bridge_contract()
     
     # Setup the appropriate contract based on type
     if CONTRACT_TYPE == "SimpleLayerUser":
