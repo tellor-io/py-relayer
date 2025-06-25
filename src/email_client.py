@@ -1,12 +1,15 @@
 import smtplib
 from email.mime.text import MIMEText
 import os
+from src.logger_utils import get_logger
+
+logger = get_logger(__name__)
 
 def send_email_alert(subject, message) -> Exception:
     try:
         send_email(subject, message, os.getenv("EMAIL_USERNAME"), os.getenv("EMAIL_RECIPIENTS"), os.getenv("EMAIL_PASSWORD"))
     except Exception as e:
-        print(f"email_client: Error sending email: {e}")
+        logger.error(f"Error sending email: {e}")
         return e
     return None
 
@@ -19,5 +22,5 @@ def send_email(subject, body, sender_username, recipients, password):
     with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp_server:
        smtp_server.login(sender_username, password)
        smtp_server.sendmail(sender_email, recipients, msg.as_string())
-    print("email_client: Message sent!")
+    logger.info("Message sent!")
 

@@ -7,6 +7,9 @@ import time
 import os
 from dotenv import load_dotenv
 import subprocess
+from src.logger_utils import get_logger
+
+logger = get_logger(__name__)
 
 # load_dotenv()
 
@@ -28,7 +31,7 @@ def start_tipper():
     N_ITERATIONS = 50
     ITERATION_SLEEP_TIME = int(os.getenv("SLEEP_TIME", 3600)) # seconds between iterations
 
-    print(f"tipper: Starting tipper for contract type {CONTRACT_TYPE}...")
+    logger.info(f"Starting tipper for contract type {CONTRACT_TYPE}...")
     
     # Initialize EVM client
     evm = EVMClient()
@@ -41,33 +44,33 @@ def start_tipper():
     elif CONTRACT_TYPE == "TestPriceFeedUser":
         evm.setup_layer_test_user_contract()
     else:
-        print(f"tipper: Unsupported contract type: {CONTRACT_TYPE}")
+        logger.error(f"Unsupported contract type: {CONTRACT_TYPE}")
         return
     
-    print(f"tipper: Initialized EVM client with {CONTRACT_TYPE} contract")
+    logger.info(f"Initialized EVM client with {CONTRACT_TYPE} contract")
 
     for i in range(N_ITERATIONS):
         e = handle_validator_set_update(evm)
         if e:
-            print("tipper: Error handling validator set update: ", e)
-            print("tipper: Sleeping for ", ITERATION_SLEEP_TIME, " seconds")
+            logger.error(f"Error handling validator set update: {e}")
+            logger.info(f"Sleeping for {ITERATION_SLEEP_TIME} seconds")
             time.sleep(ITERATION_SLEEP_TIME)
             continue
         
         start_time = time.time()
         previous_report, e = get_current_aggregate_report(QUERY_ID)
         if e:
-            print("tipper: Error getting current aggregate report: ", e)
-            print("tipper: Sleeping for ", ITERATION_SLEEP_TIME, " seconds")
+            logger.error(f"Error getting current aggregate report: {e}")
+            logger.info(f"Sleeping for {ITERATION_SLEEP_TIME} seconds")
             time.sleep(ITERATION_SLEEP_TIME)
             continue
         previous_report_timestamp = int(previous_report["timestamp"])
-        print("tipper: start time: ", start_time)
+        logger.info(f"Start time: {start_time}")
 
         e = tip(QUERY_DATA, LAYER_ADDRESS, LAYER_RPC_ENDPOINT)
         if e:
-            print("tipper: Error tipping: ", e)
-            print("tipper: Sleeping for ", ITERATION_SLEEP_TIME, " seconds")
+            logger.error(f"Error tipping: {e}")
+            logger.info(f"Sleeping for {ITERATION_SLEEP_TIME} seconds")
             time.sleep(ITERATION_SLEEP_TIME)
             continue
 
@@ -77,22 +80,22 @@ def start_tipper():
             time.sleep(250 / 1000)
             report, e = get_current_aggregate_report(QUERY_ID)
             if e:
-                print("tipper: Error getting current aggregate report: ", e)
-                print("tipper: Sleeping for ", ITERATION_SLEEP_TIME, " seconds")
+                logger.error(f"Error getting current aggregate report: {e}")
+                logger.info(f"Sleeping for {ITERATION_SLEEP_TIME} seconds")
                 time.sleep(ITERATION_SLEEP_TIME)
                 continue
             report_timestamp = int(report["timestamp"])
-            print("tipper: Report timestamp: ", report_timestamp)
+            logger.info(f"Report timestamp: {report_timestamp}")
         
         # Get oracle data
         oracle_data, e = get_oracle_data(QUERY_ID)
         if e:
-            print("tipper: Error getting oracle data: ", e)
-            print("tipper: Sleeping for ", ITERATION_SLEEP_TIME, " seconds")
+            logger.error(f"Error getting oracle data: {e}")
+            logger.info(f"Sleeping for {ITERATION_SLEEP_TIME} seconds")
             time.sleep(ITERATION_SLEEP_TIME)
             continue
         
-        print("tipper: Oracle data retrieved")
+        logger.info("Oracle data retrieved")
         ready_to_relay_time = time.time()
         
         # Get the appropriate adapter and prepare user data
@@ -106,26 +109,26 @@ def start_tipper():
         if isinstance(result, tuple) and len(result) == 2:
             tx_hash, e = result
             if e:
-                print("tipper: Error updating oracle data: ", e)
-                print("tipper: Sleeping for ", ITERATION_SLEEP_TIME, " seconds")
+                logger.error(f"Error updating oracle data: {e}")
+                logger.info(f"Sleeping for {ITERATION_SLEEP_TIME} seconds")
                 time.sleep(ITERATION_SLEEP_TIME)
                 continue
         else:
-            print("tipper: Unexpected result from update_oracle_data: ", result)
-            print("tipper: Sleeping for ", ITERATION_SLEEP_TIME, " seconds")
+            logger.error(f"Unexpected result from update_oracle_data: {result}")
+            logger.info(f"Sleeping for {ITERATION_SLEEP_TIME} seconds")
             time.sleep(ITERATION_SLEEP_TIME)
             continue
         
-        print("tipper: Oracle data updated: ", tx_hash.hex())
+        logger.info(f"Oracle data updated: {tx_hash.hex()}")
 
-        print("\ntipper: Time Report")
-        print("start time: ", start_time)
-        print("aggregate report time: ", report_timestamp)
-        print("ready to relay time: ", ready_to_relay_time)
-        print("diff ready-start: ", ready_to_relay_time - start_time)
-        print("\n")
-        print("tipper: Tipper finished")
-        print("tipper: Sleeping for ", ITERATION_SLEEP_TIME, " seconds")
+        logger.info("Time Report")
+        logger.info(f"start time: {start_time}")
+        logger.info(f"aggregate report time: {report_timestamp}")
+        logger.info(f"ready to relay time: {ready_to_relay_time}")
+        logger.info(f"diff ready-start: {ready_to_relay_time - start_time}")
+        logger.info("\n")
+        logger.info("Tipper finished")
+        logger.info(f"Sleeping for {ITERATION_SLEEP_TIME} seconds")
         time.sleep(ITERATION_SLEEP_TIME)
 
 def tip(query_data, layer_address, layer_rpc_endpoint) -> Exception:
@@ -148,13 +151,13 @@ def tip(query_data, layer_address, layer_rpc_endpoint) -> Exception:
             text=True,
             check=True
         )
-        print("Tip result:")
-        print(result.stdout)
+        logger.info("Tip result:")
+        logger.info(result.stdout)
     except subprocess.CalledProcessError as e:
-        print("Error executing tip command:")
-        print(f"Exit code: {e.returncode}")
-        print(f"stdout: {e.stdout}")
-        print(f"stderr: {e.stderr}")
+        logger.error("Error executing tip command:")
+        logger.error(f"Exit code: {e.returncode}")
+        logger.error(f"stdout: {e.stdout}")
+        logger.error(f"stderr: {e.stderr}")
         raise
 
 if __name__ == "__main__":

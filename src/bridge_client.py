@@ -1,11 +1,15 @@
 from web3 import Web3
 from eth_abi import encode
-from src.layer_client import query_latest_oracle_data
+from src.layer_client import query_latest_oracle_data, get_layer_connection_status
 from src.evm_client import EVMClient
 from src.transformer import transform_withdraw_tx_params
 from src.relayer import handle_validator_set_update
+from src.layer_tx_client import request_attestations
+from src.logger_utils import get_logger
 import time
 import os
+
+logger = get_logger(__name__)
 
 withdraw_delay = 43200 # seconds
 max_attestation_age = 43200 # seconds
@@ -17,51 +21,67 @@ withdraw_id_to_relay = int(os.getenv("WITHDRAW_ID"))
 # 	- attestation timestamp __recent enough__
 # 	- attestation checkpoint __latest__
 def relay_withdraw(withdraw_id) -> (int, Exception):
-    print("bridge_client: Relaying withdraw: ", withdraw_id)
+    logger.info(f"Relaying withdraw: {withdraw_id}")
     evm = EVMClient()
     evm.init_web3()
     evm.setup_data_bridge_contract()
     evm.setup_token_bridge_contract()
     
     withdraw_query_id = get_withdraw_query_id(withdraw_id)
-    print("bridge_client: Withdraw query id: ", withdraw_query_id)
+    logger.info(f"Withdraw query id: {withdraw_query_id}")
     # check if withdrawal id exists
     oracle_proof, e = query_latest_oracle_data(withdraw_query_id)
     if e:
         return None, e
     
-    print("bridge_client: Oracle proof: ", oracle_proof)
+    logger.debug(f"Oracle proof: {oracle_proof}")
     
     # report old enough
     report_ts = int(oracle_proof["attestation_data"]["timestamp"]) / 1000
     if time.time() - report_ts < withdraw_delay:
-        print("bridge_client: Report too new")
-        return None, e
-    
-    # attestation recent enough
-    attest_ts = int(oracle_proof["attestation_data"]["attestation_timestamp"]) / 1000
-    if time.time() - attest_ts > max_attestation_age:
-        print("bridge_client: Attestation too old")
+        logger.warning("Report too new")
         return None, e
     
     # check if withdraw is claimed
     claimed = evm.get_withdraw_claimed_status(withdraw_id)
     if claimed:
-        print("bridge_client: Withdraw already claimed")
+        logger.warning("Withdraw already claimed")
         return 1, None
+    
+    # attestation recent enough
+    attest_ts = int(oracle_proof["attestation_data"]["attestation_timestamp"]) / 1000
+    if time.time() - attest_ts > max_attestation_age:
+        logger.warning("Attestation too old")
+        layer_status, e = get_layer_connection_status()
+        if e:
+            return None, e
+        chain_id = layer_status.get("result").get("node_info").get("network")
+        # use the original timestamp string, not the converted float
+        e = request_attestations(withdraw_query_id, oracle_proof["attestation_data"]["timestamp"], os.getenv("LAYER_ADDRESS"), os.getenv("LAYER_RPC_ENDPOINT"), chain_id)
+        # sleep for 5 seconds
+        time.sleep(5)
+        # get the new oracle proof
+        oracle_proof, e = query_latest_oracle_data(withdraw_query_id)
+        if e:
+            return None, e
+        # check if the new oracle proof is recent enough
+        attest_ts = int(oracle_proof["attestation_data"]["attestation_timestamp"]) / 1000
+        if time.time() - attest_ts > max_attestation_age:
+            logger.error("Attestation still too old")
+            return None, e
     
     # update validator set
     e = handle_validator_set_update(evm)
     if e:
-        print("bridge_client: Error updating validator set: ", e)
+        logger.error(f"Error updating validator set: {e}")
         return None, e
     
     oracle_update_tx_params = transform_withdraw_tx_params(oracle_proof, withdraw_id)
-    print("bridge_client: Oracle update tx params: ", oracle_update_tx_params)
+    logger.debug(f"Oracle update tx params: {oracle_update_tx_params}")
     tx_hash = evm.withdraw_from_layer(oracle_update_tx_params)
     if not tx_hash:
         return None, Exception("Failed to withdraw from layer")
-    print("bridge_client: Oracle data updated: ", tx_hash.hex())
+    logger.info(f"Oracle data updated: {tx_hash.hex()}")
     return 2, None
 
 def fill_list_until_error(next_withdraw_id):

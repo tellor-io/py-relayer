@@ -4,6 +4,9 @@ import os
 from dotenv import load_dotenv
 import time
 from src.contract_adapters import get_contract_adapter
+from src.logger_utils import get_logger
+
+logger = get_logger(__name__)
 
 load_dotenv()
 
@@ -27,45 +30,45 @@ class EVMClient:
         self.web3_acct = Account.from_key(private_key)
         self.web3_instance.eth.defaultAccount = self.web3_acct.address
         
-        print("evm_client: Connected to Ethereum node: ", self.web3_instance.is_connected())
-        print("evm_client: Using network: ", self.web3_instance.eth.chain_id)
-        print("evm_client: Using address: ", self.web3_instance.eth.defaultAccount)
-        print("evm_client: Current block number: ", self.web3_instance.eth.block_number)
+        logger.info(f"Connected to Ethereum node: {self.web3_instance.is_connected()}")
+        logger.info(f"Using network: {self.web3_instance.eth.chain_id}")
+        logger.info(f"Using address: {self.web3_instance.eth.defaultAccount}")
+        logger.info(f"Current block number: {self.web3_instance.eth.block_number}")
 
     def setup_data_bridge_contract(self):
         data_bridge_address = os.getenv("DATA_BRIDGE_CONTRACT_ADDRESS")
         with open("abis/TellorDataBridgeTestnet.json") as f:
             abi = json.load(f)["abi"]
         self.data_bridge_contract = self.web3_instance.eth.contract(address=data_bridge_address, abi=abi)
-        print("evm_client: Data bridge contract: ", self.data_bridge_contract.address)
+        logger.info(f"Data bridge contract: {self.data_bridge_contract.address}")
 
     def setup_layer_user_contract(self):
         layer_user_address = os.getenv("LAYER_USER_CONTRACT_ADDRESS")
         with open("abis/SimpleLayerUser.json") as f:
             abi = json.load(f)["abi"]
         self.layer_user_contract = self.web3_instance.eth.contract(address=layer_user_address, abi=abi)
-        print("evm_client: Layer user contract: ", self.layer_user_contract.address)
+        logger.info(f"Layer user contract: {self.layer_user_contract.address}")
 
     def setup_token_bridge_contract(self):
         token_bridge_address = os.getenv("TOKEN_BRIDGE_CONTRACT_ADDRESS")
         with open("abis/TokenBridge.json") as f:
             abi = json.load(f)["abi"]
         self.token_bridge_contract = self.web3_instance.eth.contract(address=token_bridge_address, abi=abi)
-        print("evm_client: Token bridge contract: ", self.token_bridge_contract.address)
+        logger.info(f"Token bridge contract: {self.token_bridge_contract.address}")
 
     def setup_layer_test_user_contract(self):
         layer_user_address = os.getenv("LAYER_USER_CONTRACT_ADDRESS")
         with open("abis/TestPriceFeedUser.json") as f:
             abi = json.load(f)["abi"]
         self.layer_user_contract = self.web3_instance.eth.contract(address=layer_user_address, abi=abi)
-        print("evm_client: Layer user contract: ", self.layer_user_contract.address)
+        logger.info(f"Layer user contract: {self.layer_user_contract.address}")
 
     def setup_yolo_tellor_user_contract(self):
         layer_user_address = os.getenv("LAYER_USER_CONTRACT_ADDRESS")
         with open("abis/YoloTellorUser.json") as f:
             abi = json.load(f)["abi"]
         self.layer_user_contract = self.web3_instance.eth.contract(address=layer_user_address, abi=abi)
-        print("evm_client: Layer user contract: ", self.layer_user_contract.address)
+        logger.info(f"Layer user contract: {self.layer_user_contract.address}")
 
     def get_web3_instance(self):
         return self.web3_instance
@@ -76,7 +79,7 @@ class EVMClient:
         return self.data_bridge_contract.functions.validatorTimestamp().call()
 
     def get_current_price_data_timestamp(self):
-        print("evm_client: Getting current price data...")
+        logger.info("Getting current price data...")
         value_count = self.layer_user_contract.functions.getValueCount().call()
         if value_count == 0:
             return 0
@@ -85,8 +88,8 @@ class EVMClient:
         return timestamp
 
     def init_data_bridge(self, init_tx_params):
-        print("evm_client: Initializing Data bridge...")
-        print("evm_client: Init tx params: ", init_tx_params)
+        logger.info("Initializing Data bridge...")
+        logger.info(f"Init tx params: {init_tx_params}")
         try:
             # Build the transaction
             tx = self.data_bridge_contract.functions.init(
@@ -101,29 +104,29 @@ class EVMClient:
                 'gasPrice': int(self.web3_instance.eth.gas_price * 1.25),
             })
 
-            print("evm_client: Tx: ", tx)
+            logger.info(f"Tx: {tx}")
 
             # Sign the transaction
             signed_tx = self.web3_instance.eth.account.sign_transaction(tx, private_key=self.web3_acct.key)
-            print("evm_client: Signed transaction: ", signed_tx)
+            logger.debug(f"Signed transaction: {signed_tx}")
 
             # Send the transaction
             tx_hash = self.web3_instance.eth.send_raw_transaction(signed_tx.rawTransaction)
-            print("evm_client: Tx hash: ", tx_hash.hex())
+            logger.info(f"Tx hash: {tx_hash.hex()}")
             return tx_hash
         except Exception as e:
-            print("evm_client: Error initializing Data bridge: ", e)
+            logger.error(f"Error initializing Data bridge: {e}")
             return None
  
     def read_deployer_address(self):
-        print("evm_client: Reading deployer address...")
+        logger.info("Reading deployer address...")
         deployer_address = self.data_bridge_contract.functions.deployer().call()
-        print("evm_client: Deployer address: ", deployer_address)
+        logger.info(f"Deployer address: {deployer_address}")
         return deployer_address
 
     def update_validator_set(self, update_tx_params):
-        print("evm_client: Updating validator set...")
-        print("evm_client: Update tx params: ", update_tx_params)
+        logger.info("Updating validator set...")
+        logger.info(f"Update tx params: {update_tx_params}")
         try:
             tx = self.data_bridge_contract.functions.updateValidatorSet(
                 update_tx_params["new_validator_set_hash"],
@@ -137,13 +140,13 @@ class EVMClient:
                 'gas': 2000000,  
                 'gasPrice': int(self.web3_instance.eth.gas_price * 1.25),
             })
-            print("evm_client: Tx: ", tx)
+            logger.info(f"Tx: {tx}")
             signed_tx = self.web3_instance.eth.account.sign_transaction(tx, private_key=self.web3_acct.key)
             tx_hash = self.web3_instance.eth.send_raw_transaction(signed_tx.rawTransaction)
-            print("evm_client: Tx hash: ", tx_hash.hex())
+            logger.info(f"Tx hash: {tx_hash.hex()}")
             return tx_hash
         except Exception as e:
-            print("evm_client: Error updating validator set: ", e)
+            logger.error(f"Error updating validator set: {e}")
             return None
 
     def update_oracle_data(self, oracle_update_params, contract_type="SimpleLayerUser", user_data=None):
@@ -191,15 +194,15 @@ class EVMClient:
             
             signed_tx = self.web3_instance.eth.account.sign_transaction(tx, private_key=self.web3_acct.key)
             tx_hash = self.web3_instance.eth.send_raw_transaction(signed_tx.rawTransaction)
-            print(f"evm_client: Oracle data update tx hash: {tx_hash.hex()}")
+            logger.info(f"Oracle data update tx hash: {tx_hash.hex()}")
             return tx_hash, None
         except Exception as e:
-            print(f"evm_client: Error updating oracle data: {e}")
+            logger.error(f"Error updating oracle data: {e}")
             return None, str(e)
 
     def reset_data_bridge(self, reset_tx_params):
-        print("evm_client: Resetting Data bridge...")
-        print("evm_client: Reset tx params: ", reset_tx_params)
+        logger.info("Resetting Data bridge...")
+        logger.info(f"Reset tx params: {reset_tx_params}")
         try:
             tx = self.data_bridge_contract.functions.guardianResetValidatorSet(
                 reset_tx_params["power_threshold"],
@@ -211,18 +214,18 @@ class EVMClient:
                 'gas': 300000,
                 'gasPrice': int(self.web3_instance.eth.gas_price * 1.25),
             })
-            print("evm_client: Tx: ", tx)
+            logger.info(f"Tx: {tx}")
             signed_tx = self.web3_instance.eth.account.sign_transaction(tx, private_key=self.web3_acct.key)
             tx_hash = self.web3_instance.eth.send_raw_transaction(signed_tx.rawTransaction)
-            print("evm_client: Tx hash: ", tx_hash.hex())
+            logger.info(f"Tx hash: {tx_hash.hex()}")
             return tx_hash
         except Exception as e:
-            print("evm_client: Error resetting Data bridge: ", e)
+            logger.error(f"Error resetting Data bridge: {e}")
             return None
 
     def reset_data_bridge_testnet(self, reset_tx_params):
-        print("evm_client: Resetting Data bridge...")
-        print("evm_client: Reset tx params: ", reset_tx_params)
+        logger.info("Resetting Data bridge...")
+        logger.info(f"Reset tx params: {reset_tx_params}")
         try:
             tx = self.data_bridge_contract.functions.guardianResetValidatorSetTestnet(
                 reset_tx_params["power_threshold"],
@@ -234,13 +237,13 @@ class EVMClient:
                 'gas': 300000,
                 'gasPrice': int(self.web3_instance.eth.gas_price * 1.25),
             })
-            print("evm_client: Tx: ", tx)
+            logger.info(f"Tx: {tx}")
             signed_tx = self.web3_instance.eth.account.sign_transaction(tx, private_key=self.web3_acct.key)
             tx_hash = self.web3_instance.eth.send_raw_transaction(signed_tx.rawTransaction)
-            print("evm_client: Tx hash: ", tx_hash.hex())
+            logger.info(f"Tx hash: {tx_hash.hex()}")
             return tx_hash
         except Exception as e:
-            print("evm_client: Error resetting TellorDataBridge: ", e)
+            logger.error(f"Error resetting TellorDataBridge: {e}")
             return None
     
     def withdraw_from_layer(self, params: dict):
