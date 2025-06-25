@@ -1,9 +1,10 @@
 from web3 import Web3
 from eth_abi import encode
-from src.layer_client import query_latest_oracle_data
+from src.layer_client import query_latest_oracle_data, get_layer_connection_status
 from src.evm_client import EVMClient
 from src.transformer import transform_withdraw_tx_params
 from src.relayer import handle_validator_set_update
+from src.layer_tx_client import request_attestations
 import time
 import os
 
@@ -38,17 +39,33 @@ def relay_withdraw(withdraw_id) -> (int, Exception):
         print("bridge_client: Report too new")
         return None, e
     
-    # attestation recent enough
-    attest_ts = int(oracle_proof["attestation_data"]["attestation_timestamp"]) / 1000
-    if time.time() - attest_ts > max_attestation_age:
-        print("bridge_client: Attestation too old")
-        return None, e
-    
     # check if withdraw is claimed
     claimed = evm.get_withdraw_claimed_status(withdraw_id)
     if claimed:
         print("bridge_client: Withdraw already claimed")
         return 1, None
+    
+    # attestation recent enough
+    attest_ts = int(oracle_proof["attestation_data"]["attestation_timestamp"]) / 1000
+    if time.time() - attest_ts > max_attestation_age:
+        print("bridge_client: Attestation too old")
+        layer_status, e = get_layer_connection_status()
+        if e:
+            return None, e
+        chain_id = layer_status.get("result").get("node_info").get("network")
+        # use the original timestamp string, not the converted float
+        e = request_attestations(withdraw_query_id, oracle_proof["attestation_data"]["timestamp"], os.getenv("LAYER_ADDRESS"), os.getenv("LAYER_RPC_ENDPOINT"), chain_id)
+        # sleep for 5 seconds
+        time.sleep(5)
+        # get the new oracle proof
+        oracle_proof, e = query_latest_oracle_data(withdraw_query_id)
+        if e:
+            return None, e
+        # check if the new oracle proof is recent enough
+        attest_ts = int(oracle_proof["attestation_data"]["attestation_timestamp"]) / 1000
+        if time.time() - attest_ts > max_attestation_age:
+            print("bridge_client: Attestation still too old")
+            return None, e
     
     # update validator set
     e = handle_validator_set_update(evm)

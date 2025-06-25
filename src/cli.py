@@ -25,9 +25,10 @@ def cli():
 @click.option('--layer-rpc', envvar='LAYER_RPC_ENDPOINT', help='Layer RPC endpoint')
 @click.option('--contract-type', type=click.Choice(['SimpleLayerUser', 'TestPriceFeedUser', 'YoloTellorUser']), 
               default='SimpleLayerUser', help='Type of contract to use for relaying')
+@click.option('--layer-tx-creator-address', envvar='LAYER_ADDRESS', help='Local keyring address used for creating transactions on layer')
 @click.option('--just-print', is_flag=True, help='Just print the oracle data parameters without submitting transaction')
 def relay(query_id, sleep_time, eth_private_key, web3_provider, layer_swagger, layer_rpc, 
-          data_bridge_address, layer_user_address, contract_type, just_print):
+          data_bridge_address, layer_user_address, contract_type, just_print, layer_tx_creator_address):
     """Start the relayer process"""
     # Set environment variables
     if eth_private_key:
@@ -49,7 +50,8 @@ def relay(query_id, sleep_time, eth_private_key, web3_provider, layer_swagger, l
     
     os.environ['CONTRACT_TYPE'] = contract_type
     os.environ['JUST_PRINT'] = str(just_print)
-    
+    if layer_tx_creator_address:
+        os.environ['LAYER_ADDRESS'] = layer_tx_creator_address
     start_relayer()
 
 @cli.command()
@@ -111,7 +113,8 @@ def update(query_id, contract_type):
 @click.option('--layer-swagger', envvar='LAYER_SWAGGER_ENDPOINT', help='Layer swagger endpoint')
 @click.option('--data-bridge-address', envvar='DATA_BRIDGE_CONTRACT_ADDRESS', help='Tellor data bridge contract address')
 @click.option('--token-bridge-address', envvar='TOKEN_BRIDGE_CONTRACT_ADDRESS', help='Token Bridge contract address')
-def relay_bridge(withdraw_id, eth_private_key, web3_provider, layer_swagger, data_bridge_address, token_bridge_address):
+@click.option('--layer-tx-creator-address', envvar='LAYER_ADDRESS', help='Local keyring address used for creating transactions on layer')
+def relay_bridge(withdraw_id, eth_private_key, web3_provider, layer_swagger, data_bridge_address, token_bridge_address, layer_tx_creator_address):
     """Relay a specific withdraw from Layer to EVM chain"""
     if eth_private_key:
         os.environ['ETH_PRIVATE_KEY'] = eth_private_key
@@ -123,6 +126,8 @@ def relay_bridge(withdraw_id, eth_private_key, web3_provider, layer_swagger, dat
         os.environ['DATA_BRIDGE_CONTRACT_ADDRESS'] = data_bridge_address
     if token_bridge_address:
         os.environ['TOKEN_BRIDGE_CONTRACT_ADDRESS'] = token_bridge_address
+    if layer_tx_creator_address:
+        os.environ['LAYER_ADDRESS'] = layer_tx_creator_address
 
     status, error = relay_withdraw(withdraw_id)
     if error:

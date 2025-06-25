@@ -260,11 +260,17 @@ def get_oracle_proof(query_id: str, timestamp: int) -> tuple[dict, Exception]:
     return oracle_proof, None
 
 def get_sufficient_attestation_power(attestations: list[dict], current_validator_set: dict, threshold: int) -> bool:
+    print(f"layer_client: Checking attestation power - attestations: {len(attestations)}, validators: {len(current_validator_set)}, threshold: {threshold}")
     power_sum = 0
-    for i in range(len(attestations)):
+    # ensure we don't go beyond the validator set size
+    max_index = min(len(attestations), len(current_validator_set))
+    for i in range(max_index):
         if len(attestations[i]) > 0:
-            power_sum += int(current_validator_set[i]["power"])
-    return power_sum >= int(threshold)
+            validator_power = int(current_validator_set[i]["power"])
+            power_sum += validator_power
+    sufficient = power_sum >= int(threshold)
+    print(f"layer_client: Total power: {power_sum}, threshold: {threshold}, sufficient: {sufficient}")
+    return sufficient
 
 def get_next_validator_set_timestamp(given_timestamp: int) -> tuple[str, Exception]:
     given_ts_index, e = get_validator_set_index_by_timestamp(given_timestamp)
@@ -335,10 +341,12 @@ def get_layer_latest_validator_timestamp() -> tuple[str, Exception]:
     return latest_timestamp.get("timestamp"), None
 
 def get_current_validator_set() -> tuple[dict, Exception]:
+    print("layer_client: Getting current validator set")
     latest_timestamp, e = get_layer_latest_validator_timestamp()
     if e:
         return None, e
     valset, e = get_valset_by_timestamp(latest_timestamp)
+    print("layer_client: Valset: ", valset)
     if e:
         return None, e
     return valset, None
