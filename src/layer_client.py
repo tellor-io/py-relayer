@@ -3,6 +3,9 @@ import requests
 import time
 import os
 from dateutil import parser
+from src.logger_utils import get_logger
+
+logger = get_logger(__name__)
 
 def strip_0x(value):
     if value.startswith("0x"):
@@ -12,15 +15,15 @@ def strip_0x(value):
 def get_layer_connection_status() -> tuple[str, Exception]:
     swagger_endpoint = os.getenv("LAYER_SWAGGER_ENDPOINT")
     rpc_endpoint = os.getenv("LAYER_RPC_ENDPOINT")
-    print("layer_client: Getting layer connection status")
-    print("layer_client: swagger endpoint: ", swagger_endpoint)
-    print("layer_client: rpc endpoint: ", rpc_endpoint)
+    logger.info("Getting layer connection status")
+    logger.debug(f"swagger endpoint: {swagger_endpoint}")
+    logger.debug(f"rpc endpoint: {rpc_endpoint}")
     request = f"{rpc_endpoint}/status"
     try:
         response = requests.get(request)
         return response.json(), None
     except Exception as e:
-        print(f"layer_client: Error getting layer connection status: {e}")
+        logger.error(f"Error getting layer connection status: {e}")
         return None, e
 
 def get_layer_chain_status() -> tuple[str, Exception]:
@@ -62,7 +65,7 @@ def get_validator_timestamp_by_index(index: int) -> tuple[dict, Exception]:
         response = requests.get(request)
         return response.json(), None
     except Exception as e:
-        print(f"layer_client: Error getting validator timestamp by index: {e}")
+        logger.error(f"Error getting validator timestamp by index: {e}")
         return None, e
 
 def get_validator_checkpoint_params(timestamp: int) -> tuple[dict, Exception]:
@@ -72,7 +75,7 @@ def get_validator_checkpoint_params(timestamp: int) -> tuple[dict, Exception]:
         response = requests.get(request)
         return response.json(), None
     except Exception as e:
-        print(f"layer_client: Error getting validator checkpoint params: {e}")
+        logger.error(f"Error getting validator checkpoint params: {e}")
         return None, e
 
 def get_valset_by_timestamp(timestamp: int) -> tuple[dict, Exception]:
@@ -82,7 +85,7 @@ def get_valset_by_timestamp(timestamp: int) -> tuple[dict, Exception]:
         response = requests.get(request)
         return response.json(), None
     except Exception as e:
-        print(f"layer_client: Error getting validator set by timestamp: {e}")
+        logger.error(f"Error getting validator set by timestamp: {e}")
         return None, e
 
 def get_valset_sigs(timestamp: int) -> tuple[dict, Exception]:
@@ -92,7 +95,7 @@ def get_valset_sigs(timestamp: int) -> tuple[dict, Exception]:
         response = requests.get(request)
         return response.json(), None
     except Exception as e:
-        print(f"layer_client: Error getting validator set sigs: {e}")
+        logger.error(f"Error getting validator set sigs: {e}")
         return None, e
 
 def get_current_validator_set_timestamp() -> tuple[str, Exception]:
@@ -102,7 +105,7 @@ def get_current_validator_set_timestamp() -> tuple[str, Exception]:
         response = requests.get(request)
         return response.json(), None
     except Exception as e:
-        print(f"layer_client: Error getting current validator set timestamp: {e}")
+        logger.error(f"Error getting current validator set timestamp: {e}")
         return None, e
 
 def get_validator_set_index_by_timestamp(timestamp: int) -> tuple[dict, Exception]:
@@ -112,7 +115,7 @@ def get_validator_set_index_by_timestamp(timestamp: int) -> tuple[dict, Exceptio
         response = requests.get(request)
         return response.json(), None
     except Exception as e:
-        print(f"layer_client: Error getting validator set index by timestamp: {e}")
+        logger.error(f"Error getting validator set index by timestamp: {e}")
         return None, e
 
 # oracle data functions 
@@ -124,19 +127,19 @@ def get_data_before(query_id: str, timestamp_before: int) -> tuple[dict, Excepti
         response = requests.get(request)
         return response.json(), None
     except Exception as e:
-        print(f"layer_client: Error getting data before: {e}")
+        logger.error(f"Error getting data before: {e}")
         return None, e
     
 def get_reports_by_aggregate(query_id: str, timestamp: int) -> tuple[dict, Exception]:
     query_id = strip_0x(query_id)
     swagger_endpoint = os.getenv("LAYER_SWAGGER_ENDPOINT")
     request = f"{swagger_endpoint}/tellor-io/layer/oracle/get_reports_by_aggregate/{query_id}/{timestamp}?pagination.limit=10000"
-    print(f"layer_client: Request: {request}")
+    logger.debug(f"Request: {request}")
     try:
         response = requests.get(request)
         return response.json(), None
     except Exception as e:
-        print(f"layer_client: Error getting reports by aggregate: {e}")
+        logger.error(f"Error getting reports by aggregate: {e}")
         return None, e
     
 def get_current_aggregate_report(query_id: str) -> tuple[dict, Exception]:
@@ -147,7 +150,7 @@ def get_current_aggregate_report(query_id: str) -> tuple[dict, Exception]:
         response = requests.get(request)
         return response.json(), None
     except Exception as e:
-        print(f"layer_client: Error getting current aggregate report: {e}")
+        logger.error(f"Error getting current aggregate report: {e}")
         return None, e
 
 def get_snapshots_by_report(query_id: str, timestamp: int) -> tuple[dict, Exception]:
@@ -158,7 +161,7 @@ def get_snapshots_by_report(query_id: str, timestamp: int) -> tuple[dict, Except
         response = requests.get(request)
         return response.json(), None
     except Exception as e:
-        print(f"layer_client: Error getting snapshots by report: {e}")
+        logger.error(f"Error getting snapshots by report: {e}")
         return None, e
 
 def get_attestations_by_snapshot(snapshot: str) -> tuple[dict, Exception]:
@@ -168,7 +171,7 @@ def get_attestations_by_snapshot(snapshot: str) -> tuple[dict, Exception]:
         response = requests.get(request)
         return response.json(), None
     except Exception as e:
-        print(f"layer_client: Error getting attestations by snapshot: {e}")
+        logger.error(f"Error getting attestations by snapshot: {e}")
         return None, e
 
 def get_attestation_data_by_snapshot(snapshot: str) -> tuple[dict, Exception]:
@@ -178,13 +181,13 @@ def get_attestation_data_by_snapshot(snapshot: str) -> tuple[dict, Exception]:
         response = requests.get(request)
         return response.json(), None
     except Exception as e:
-        print(f"layer_client: Error getting attestation data by snapshot: {e}")
+        logger.error(f"Error getting attestation data by snapshot: {e}")
         return None, e
 
 ## queries
 
 def query_latest_oracle_data(query_id: str) -> tuple[dict, Exception]:
-    print("layer_client: Querying latest oracle data")
+    logger.info("Querying latest oracle data")
     # subtract 1 second to account for attestation time,
     # TODO: optimize
     current_time = int(time.time()) * 1000 - 1000 
@@ -194,7 +197,7 @@ def query_latest_oracle_data(query_id: str) -> tuple[dict, Exception]:
     return get_oracle_proof(query_id, report["timestamp"])
 
 def get_attestation_data_before(query_id: str, timestamp: int) -> tuple[dict, Exception]:
-    print(f"layer_client: Querying attestation data before {timestamp}")
+    logger.info(f"Querying attestation data before {timestamp}")
     report, e = get_data_before(query_id, timestamp)
     if e:
         return None, e
@@ -205,11 +208,11 @@ def get_attestation_data_before(query_id: str, timestamp: int) -> tuple[dict, Ex
     attestation_data, e = get_attestation_data_by_snapshot(last_snapshot)
     if e:
         return None, e
-    print(f"layer_client: Attestation data: {attestation_data}")
+    logger.debug(f"Attestation data: {attestation_data}")
     return attestation_data, None
 
 def get_oracle_proof(query_id: str, timestamp: int) -> tuple[dict, Exception]:
-    print(f"layer_client: Querying oracle proof for {timestamp}")
+    logger.info(f"Querying oracle proof for {timestamp}")
     snapshots, e = get_snapshots_by_report(query_id, timestamp)
     if e:
         return None, e
@@ -235,7 +238,7 @@ def get_oracle_proof(query_id: str, timestamp: int) -> tuple[dict, Exception]:
         retry_sleep_time = 2
         retry_count = 0
         while retry_count < 5:
-            print(f"layer_client: Insufficient attestation power, sleeping for {retry_sleep_time} seconds")
+            logger.warning(f"Insufficient attestation power, sleeping for {retry_sleep_time} seconds")
             time.sleep(retry_sleep_time)
             attestations, e = get_attestations_by_snapshot(last_snapshot)
             if e:
@@ -260,7 +263,7 @@ def get_oracle_proof(query_id: str, timestamp: int) -> tuple[dict, Exception]:
     return oracle_proof, None
 
 def get_sufficient_attestation_power(attestations: list[dict], current_validator_set: dict, threshold: int) -> bool:
-    print(f"layer_client: Checking attestation power - attestations: {len(attestations)}, validators: {len(current_validator_set)}, threshold: {threshold}")
+    logger.debug(f"Checking attestation power - attestations: {len(attestations)}, validators: {len(current_validator_set)}, threshold: {threshold}")
     power_sum = 0
     # ensure we don't go beyond the validator set size
     max_index = min(len(attestations), len(current_validator_set))
@@ -269,7 +272,7 @@ def get_sufficient_attestation_power(attestations: list[dict], current_validator
             validator_power = int(current_validator_set[i]["power"])
             power_sum += validator_power
     sufficient = power_sum >= int(threshold)
-    print(f"layer_client: Total power: {power_sum}, threshold: {threshold}, sufficient: {sufficient}")
+    logger.info(f"Total power: {power_sum}, threshold: {threshold}, sufficient: {sufficient}")
     return sufficient
 
 def get_next_validator_set_timestamp(given_timestamp: int) -> tuple[str, Exception]:
@@ -341,12 +344,12 @@ def get_layer_latest_validator_timestamp() -> tuple[str, Exception]:
     return latest_timestamp.get("timestamp"), None
 
 def get_current_validator_set() -> tuple[dict, Exception]:
-    print("layer_client: Getting current validator set")
+    logger.info("Getting current validator set")
     latest_timestamp, e = get_layer_latest_validator_timestamp()
     if e:
         return None, e
     valset, e = get_valset_by_timestamp(latest_timestamp)
-    print("layer_client: Valset: ", valset)
+    logger.debug(f"Valset: {valset}")
     if e:
         return None, e
     return valset, None
@@ -356,7 +359,7 @@ def get_current_power_threshold() -> tuple[int, Exception]:
     if e:
         return None, e
     checkpoint_params, e = get_validator_checkpoint_params(latest_timestamp)
-    print("checkpoint_params: ", checkpoint_params)
+    logger.debug(f"checkpoint_params: {checkpoint_params}")
     if e:
         return None, e
     return checkpoint_params.get("power_threshold"), None

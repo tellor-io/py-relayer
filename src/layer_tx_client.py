@@ -1,5 +1,8 @@
 from src.layer_client import strip_0x
+from src.logger_utils import get_logger
 import subprocess
+
+logger = get_logger(__name__)
 
 def tip(query_data, layer_address, layer_rpc_endpoint) -> Exception:
     # Remove '0x' prefix if it exists
@@ -21,13 +24,13 @@ def tip(query_data, layer_address, layer_rpc_endpoint) -> Exception:
             text=True,
             check=True
         )
-        print("Tip result:")
-        print(result.stdout)
+        logger.info("Tip result:")
+        logger.info(result.stdout)
     except subprocess.CalledProcessError as e:
-        print("Error executing tip command:")
-        print(f"Exit code: {e.returncode}")
-        print(f"stdout: {e.stdout}")
-        print(f"stderr: {e.stderr}")
+        logger.error("Error executing tip command:")
+        logger.error(f"Exit code: {e.returncode}")
+        logger.error(f"stdout: {e.stdout}")
+        logger.error(f"stderr: {e.stderr}")
         raise
 
 def request_attestations(query_id, timestamp, layer_address, layer_rpc_endpoint, chain_id="layertest-3") -> Exception:
@@ -55,11 +58,11 @@ def request_attestations(query_id, timestamp, layer_address, layer_rpc_endpoint,
             text=True,
             check=True
         )
-        print("Request attestations result:")
-        print(result.stdout)
+        logger.info("Request attestations result:")
+        logger.info(result.stdout)
     except subprocess.CalledProcessError as e:
-        print("Error executing request attestations command:")
-        print(f"Exit code: {e.returncode}")
-        print(f"stdout: {e.stdout}")
-        print(f"stderr: {e.stderr}")
+        logger.error("Error executing request attestations command:")
+        logger.error(f"Exit code: {e.returncode}")
+        logger.error(f"stdout: {e.stdout}")
+        logger.error(f"stderr: {e.stderr}")
         raise
