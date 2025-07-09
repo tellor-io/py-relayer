@@ -19,6 +19,26 @@ class EVMClient:
         self.token_bridge_contract = None
         # self.layer_test_user_contract = None
 
+    def wait_for_transaction_receipt_and_log(self, tx_hash, operation_name, timeout=300):
+        """
+        Wait for transaction receipt and log success/failure.
+        Returns (success: bool, receipt: dict or None)
+        """
+        try:
+            logger.info(f"Waiting for {operation_name} transaction receipt: {tx_hash.hex()}")
+            receipt = self.web3_instance.eth.wait_for_transaction_receipt(tx_hash, timeout=timeout)
+            
+            if receipt.status == 1:
+                logger.info(f"{operation_name} transaction successful! Block: {receipt.blockNumber}, Gas used: {receipt.gasUsed}")
+                return True, receipt
+            else:
+                logger.error(f"{operation_name} transaction FAILED! Tx hash: {tx_hash.hex()}, Block: {receipt.blockNumber}")
+                return False, receipt
+                
+        except Exception as e:
+            logger.error(f"Error waiting for {operation_name} transaction receipt: {e}")
+            return False, None
+
     def init_web3(self):
         provider_url = os.getenv("WEB3_PROVIDER_URL")
         private_key = os.getenv("ETH_PRIVATE_KEY")
@@ -113,6 +133,12 @@ class EVMClient:
             # Send the transaction
             tx_hash = self.web3_instance.eth.send_raw_transaction(signed_tx.rawTransaction)
             logger.info(f"Tx hash: {tx_hash.hex()}")
+            
+            # Wait for receipt and check success
+            success, _ = self.wait_for_transaction_receipt_and_log(tx_hash, "Data bridge initialization")
+            if not success:
+                return None
+                
             return tx_hash
         except Exception as e:
             logger.error(f"Error initializing Data bridge: {e}")
@@ -144,13 +170,22 @@ class EVMClient:
             signed_tx = self.web3_instance.eth.account.sign_transaction(tx, private_key=self.web3_acct.key)
             tx_hash = self.web3_instance.eth.send_raw_transaction(signed_tx.rawTransaction)
             logger.info(f"Tx hash: {tx_hash.hex()}")
+            
+            # Wait for receipt and check success
+            success, _ = self.wait_for_transaction_receipt_and_log(tx_hash, "Validator set update")
+            if not success:
+                return None
+                
             return tx_hash
         except Exception as e:
             logger.error(f"Error updating validator set: {e}")
             return None
 
-    def update_oracle_data(self, oracle_update_params, contract_type="SimpleLayerUser", user_data=None):
-        """Update oracle data in the appropriate contract"""
+    def update_oracle_data(self, oracle_update_params, contract_type="SimpleLayerUser", user_data=None) -> tuple[str, str]:
+        """
+        Update oracle data in the appropriate contract
+        Returns (tx_hash: str, error: str)
+        """
         try:
             contract_address = os.getenv("LAYER_USER_CONTRACT_ADDRESS")
             if not contract_address:
@@ -194,7 +229,12 @@ class EVMClient:
             
             signed_tx = self.web3_instance.eth.account.sign_transaction(tx, private_key=self.web3_acct.key)
             tx_hash = self.web3_instance.eth.send_raw_transaction(signed_tx.rawTransaction)
-            logger.info(f"Oracle data update tx hash: {tx_hash.hex()}")
+            
+            # Wait for receipt and check success
+            success, _ = self.wait_for_transaction_receipt_and_log(tx_hash, f"Oracle data update ({contract_type})")
+            if not success:
+                return None, "Transaction failed"
+                
             return tx_hash, None
         except Exception as e:
             logger.error(f"Error updating oracle data: {e}")
@@ -218,6 +258,12 @@ class EVMClient:
             signed_tx = self.web3_instance.eth.account.sign_transaction(tx, private_key=self.web3_acct.key)
             tx_hash = self.web3_instance.eth.send_raw_transaction(signed_tx.rawTransaction)
             logger.info(f"Tx hash: {tx_hash.hex()}")
+            
+            # Wait for receipt and check success
+            success, _ = self.wait_for_transaction_receipt_and_log(tx_hash, "Data bridge reset")
+            if not success:
+                return None
+                
             return tx_hash
         except Exception as e:
             logger.error(f"Error resetting Data bridge: {e}")
@@ -241,6 +287,12 @@ class EVMClient:
             signed_tx = self.web3_instance.eth.account.sign_transaction(tx, private_key=self.web3_acct.key)
             tx_hash = self.web3_instance.eth.send_raw_transaction(signed_tx.rawTransaction)
             logger.info(f"Tx hash: {tx_hash.hex()}")
+            
+            # Wait for receipt and check success
+            success, _ = self.wait_for_transaction_receipt_and_log(tx_hash, "Data bridge testnet reset")
+            if not success:
+                return None
+                
             return tx_hash
         except Exception as e:
             logger.error(f"Error resetting TellorDataBridge: {e}")
@@ -249,20 +301,31 @@ class EVMClient:
     def withdraw_from_layer(self, params: dict):
         if not self.token_bridge_contract:
             raise Exception("Token bridge contract not initialized")
-        tx = self.token_bridge_contract.functions.withdrawFromLayer(
-            params['oracle_attestation_data'],
-            params['current_validator_set'],
-            params['sigs'],
-            params['withdraw_id']
-        ).build_transaction({
-            'from': self.web3_acct.address,
-            'nonce': self.web3_instance.eth.get_transaction_count(self.web3_acct.address),
-            'gas': 500000,
-            'gasPrice': int(self.web3_instance.eth.gas_price * 1.25)
-        })
-        signed_tx = self.web3_instance.eth.account.sign_transaction(tx, self.web3_acct.key)
-        tx_hash = self.web3_instance.eth.send_raw_transaction(signed_tx.rawTransaction)
-        return tx_hash
+        try:
+            tx = self.token_bridge_contract.functions.withdrawFromLayer(
+                params['oracle_attestation_data'],
+                params['current_validator_set'],
+                params['sigs'],
+                params['withdraw_id']
+            ).build_transaction({
+                'from': self.web3_acct.address,
+                'nonce': self.web3_instance.eth.get_transaction_count(self.web3_acct.address),
+                'gas': 500000,
+                'gasPrice': int(self.web3_instance.eth.gas_price * 1.25)
+            })
+            signed_tx = self.web3_instance.eth.account.sign_transaction(tx, self.web3_acct.key)
+            tx_hash = self.web3_instance.eth.send_raw_transaction(signed_tx.rawTransaction)
+            logger.info(f"Withdraw tx hash: {tx_hash.hex()}")
+            
+            # Wait for receipt and check success
+            success, _ = self.wait_for_transaction_receipt_and_log(tx_hash, "Layer withdrawal")
+            if not success:
+                return None
+                
+            return tx_hash
+        except Exception as e:
+            logger.error(f"Error withdrawing from layer: {e}")
+            return None
 
     def get_withdraw_claimed_status(self, withdraw_id: int) -> bool:
         if not self.token_bridge_contract:

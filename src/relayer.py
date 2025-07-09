@@ -185,7 +185,7 @@ def start_relayer():
             user_trigger_timestamp = int(time.time())
             user_data = {"user_trigger_timestamp": user_trigger_timestamp}
             
-            tx_hash, error = update_user_oracle_data(query_id, contract_type, user_data)
+            _, error = update_user_oracle_data(query_id, contract_type, user_data)
             if error:
                 logger.error(f"Error updating oracle data: {error}")
                 sleep(sleep_time)
