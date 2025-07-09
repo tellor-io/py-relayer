@@ -42,6 +42,7 @@ def cli(ctx, verbose, no_color):
 @add_logging_options
 @click.option('--query-id', envvar='QUERY_ID', help='Query ID to relay')
 @click.option('--sleep-time', envvar='SLEEP_TIME', type=int, default=600, help='Sleep time between relays in seconds')
+@click.option('--fixed-interval', is_flag=True, help='Use fixed interval timing instead of fixed sleep duration')
 @click.option('--eth-private-key', envvar='ETH_PRIVATE_KEY', help='Ethereum private key')
 @click.option('--data-bridge-address', envvar='DATA_BRIDGE_CONTRACT_ADDRESS', help='Tellor data bridge contract address')
 @click.option('--layer-user-address', envvar='LAYER_USER_CONTRACT_ADDRESS', help='Layer user contract address')
@@ -52,7 +53,7 @@ def cli(ctx, verbose, no_color):
               default='SimpleLayerUser', help='Type of contract to use for relaying')
 @click.option('--layer-tx-creator-address', envvar='LAYER_ADDRESS', help='Local keyring address used for creating transactions on layer')
 @click.option('--just-print', is_flag=True, help='Just print the oracle data parameters without submitting transaction')
-def relay(query_id, sleep_time, eth_private_key, web3_provider, layer_swagger, layer_rpc, 
+def relay(query_id, sleep_time, fixed_interval, eth_private_key, web3_provider, layer_swagger, layer_rpc, 
           data_bridge_address, layer_user_address, contract_type, just_print, layer_tx_creator_address, verbose, no_color):
     """Start the relayer process"""
     configure_logging(verbose=verbose, no_color=no_color)
@@ -76,6 +77,7 @@ def relay(query_id, sleep_time, eth_private_key, web3_provider, layer_swagger, l
     
     os.environ['CONTRACT_TYPE'] = contract_type
     os.environ['JUST_PRINT'] = str(just_print)
+    os.environ['FIXED_INTERVAL'] = str(fixed_interval)
     if layer_tx_creator_address:
         os.environ['LAYER_ADDRESS'] = layer_tx_creator_address
     start_relayer()

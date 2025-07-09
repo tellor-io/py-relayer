@@ -157,9 +157,11 @@ def start_relayer():
     query_id = os.getenv("QUERY_ID")
     sleep_time = int(os.getenv("SLEEP_TIME", "600"))
     contract_type = os.getenv("CONTRACT_TYPE", "SimpleLayerUser")
+    use_fixed_interval = os.getenv("FIXED_INTERVAL", "False").lower() == "true"
     
     logger.info(f"Starting relayer for query ID {query_id} using {contract_type} contract...")
     logger.info(f"Sleep time: {sleep_time} seconds")
+    logger.info(f"Fixed interval mode: {use_fixed_interval}")
 
     evm = EVMClient()
     evm.init_web3()
@@ -171,14 +173,20 @@ def start_relayer():
             chain_status, error = get_layer_chain_status()
             if chain_status:
                 logger.warning(f"Layer chain status: {chain_status}")
-                sleep(sleep_time)
+                if use_fixed_interval:
+                    fixed_interval_sleep(sleep_time)
+                else:
+                    sleep(sleep_time)
                 continue
 
             # Valset update
             e = handle_validator_set_update(evm)
             if e:
                 logger.error(f"Error handling validator set update: {e}")
-                sleep(sleep_time)
+                if use_fixed_interval:
+                    fixed_interval_sleep(sleep_time)
+                else:
+                    sleep(sleep_time)
                 continue
             
             # Update oracle data
@@ -188,14 +196,23 @@ def start_relayer():
             _, error = update_user_oracle_data(query_id, contract_type, user_data)
             if error:
                 logger.error(f"Error updating oracle data: {error}")
-                sleep(sleep_time)
+                if use_fixed_interval:
+                    fixed_interval_sleep(sleep_time)
+                else:
+                    sleep(sleep_time)
                 continue
             
             
         except Exception as e:
             logger.error(f"Unexpected error: {e}")
         
-        sleep(sleep_time)
+        # Sleep until next relay
+        if use_fixed_interval:
+            logger.debug(f"Using fixed interval sleep ({sleep_time}s)")
+            fixed_interval_sleep(sleep_time)
+        else:
+            logger.debug(f"Using regular sleep ({sleep_time}s)")
+            sleep(sleep_time)
 
 def data_bridge_init(evm) -> Exception:
     logger.info("Initializing TellorDataBridge...")
@@ -285,6 +302,26 @@ def handle_validator_set_update(evm) -> Exception:
 def sleep(seconds):
     logger.debug(f"Sleeping for {seconds} seconds")
     time.sleep(seconds)
+    return None
+
+def fixed_interval_sleep(interval_seconds):
+    """
+    Sleep for a fixed interval, starting from 1/1/2025 00:00:00 GMT
+    """
+    current_time = time.time()
+    # Basis time is 1/1/2025 00:00:00 GMT, or 1735689600
+    basis_time = 1735689600
+    diff = current_time - basis_time
+    next_sleep_time = int(diff / interval_seconds) * interval_seconds + interval_seconds + basis_time
+    sleep_duration = next_sleep_time - current_time
+    
+    # Safety check to prevent negative sleep times
+    if sleep_duration < 0:
+        logger.warning(f"Calculated negative sleep duration: {sleep_duration:.2f}s, sleeping for 0")
+        sleep_duration = 0
+    
+    logger.debug(f"Fixed interval sleep: {sleep_duration:.2f}s until next {interval_seconds}s boundary")
+    time.sleep(sleep_duration)
     return None
 
 def format_for_etherscan(attest_data, validator_set, sigs):
