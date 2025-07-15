@@ -9,7 +9,7 @@ import os
 
 logger = get_logger(__name__)
 
-VALSET_SLEEP_TIME = 60
+VALSET_SLEEP_TIME = 1
 
 def get_oracle_data(query_id):
     """
@@ -58,7 +58,6 @@ def get_oracle_data_optimized(query_id, optimistic_delay=900, max_attestation_ag
     attestation_data, e = get_attestation_data_before(query_id, int(time.time()) * 1000)
     if e:
         return None, e
-    relay_report_timestamp = 0
     if attestation_data["last_consensus_timestamp"] == attestation_data["timestamp"]:
         # is consensus
         logger.info("Latest report is consensus")
@@ -248,7 +247,7 @@ def update_to_latest_layer_validator_set(evm, data_bridge_validator_timestamp, l
         logger.debug(f"Valset update params: {valset_update_params}")
         valset_update_tx_params = transform_valset_update_params(valset_update_params)
         logger.debug(f"Valset update tx params: {valset_update_tx_params}")
-        valset_update_tx = evm.update_validator_set(valset_update_tx_params)  # Use evm instance method
+        _ = evm.update_validator_set(valset_update_tx_params)  # Use evm instance method
         logger.info("Submitted valset update tx")
         sleep(VALSET_SLEEP_TIME)
         layer_validator_timestamp, e = get_layer_latest_validator_timestamp()
@@ -310,7 +309,9 @@ def fixed_interval_sleep(interval_seconds):
     """
     current_time = time.time()
     # Basis time is 1/1/2025 00:00:00 GMT, or 1735689600
-    basis_time = 1735689600
+    # Plus 5 seconds since sepolia's next block after 00:00:00 is consistently at 00:00:12
+    # This gives time to be try to be included in the next eth block
+    basis_time = 1735689600 + 5
     diff = current_time - basis_time
     next_sleep_time = int(diff / interval_seconds) * interval_seconds + interval_seconds + basis_time
     sleep_duration = next_sleep_time - current_time
