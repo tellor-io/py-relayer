@@ -3,10 +3,13 @@ from src.evm_client import EVMClient  # Only import the class
 from src.transformer import transform_data_bridge_init_params, transform_valset_update_params, transform_oracle_update_params, transform_data_bridge_reset_params
 from src.email_client import send_email_alert
 from src.layer_tx_client import request_attestations
+from src.logger_utils import get_logger
 import time
 import os
 
-VALSET_SLEEP_TIME = 60
+logger = get_logger(__name__)
+
+VALSET_SLEEP_TIME = 1
 
 def get_oracle_data(query_id):
     """
@@ -19,7 +22,7 @@ def get_oracle_data(query_id):
     Returns:
         tuple: (oracle_data, error)
     """
-    print(f"relayer: Getting oracle data for query ID {query_id}")
+    logger.info(f"Getting oracle data for query ID {query_id}")
     
     # Get oracle data from Layer chain
     oracle_data_response, error = query_latest_oracle_data(query_id)
@@ -55,19 +58,18 @@ def get_oracle_data_optimized(query_id, optimistic_delay=900, max_attestation_ag
     attestation_data, e = get_attestation_data_before(query_id, int(time.time()) * 1000)
     if e:
         return None, e
-    relay_report_timestamp = 0
     if attestation_data["last_consensus_timestamp"] == attestation_data["timestamp"]:
         # is consensus
-        print("relayer: Latest report is consensus")
+        logger.info("Latest report is consensus")
     elif int(time.time()) * 1000 - int(attestation_data["last_consensus_timestamp"]) < optimistic_delay * 1000:
         # last consensus timestamp is less than optimistic delay, use this
-        print("relayer: Latest report is not consensus, but last consensus timestamp is less than optimistic delay")
+        logger.info("Latest report is not consensus, but last consensus timestamp is less than optimistic delay")
         attestation_data, e = get_attestation_data_before(query_id, int(attestation_data["last_consensus_timestamp"]) + 1)
         if e:
             return None, e
     else:
         # no consensus, get data before now - optimistic_delay
-        print("relayer: Latest report is not consensus, and last consensus timestamp is older than optimistic delay")
+        logger.info("Latest report is not consensus, and last consensus timestamp is older than optimistic delay")
         attestation_data, e = get_attestation_data_before(query_id, int(time.time()) * 1000 - optimistic_delay)
         if e:
             return None, e
@@ -76,7 +78,7 @@ def get_oracle_data_optimized(query_id, optimistic_delay=900, max_attestation_ag
             return None, e
         if int(attestation_data["aggregate_power"]) < current_power_threshold * 3/2 * min_stake_percentage / 100:
             # report has too little stake
-            print("relayer: Report has too little stake")
+            logger.warning("Report has too little stake")
             # TODO: implement tip, request new report?
             return None, "Report has too little stake"
     
@@ -86,7 +88,7 @@ def get_oracle_data_optimized(query_id, optimistic_delay=900, max_attestation_ag
         return None, f"Report is too old. Report timestamp: {attestation_data['timestamp']} Current timestamp: {int(time.time()) * 1000}"
     if int(time.time()) * 1000 - int(attestation_data["attestation_timestamp"]) > max_attestation_age * 1000:
         # attestation is too old, request new attestations
-        print("relayer: Attestation is too old, requesting new attestations")
+        logger.warning("Attestation is too old, requesting new attestations")
         layer_status, e = get_layer_connection_status()
         if e:
             return None, e
@@ -117,7 +119,7 @@ def update_user_oracle_data(query_id=None, contract_type="SimpleLayerUser", user
         query_id = os.getenv("QUERY_ID")
     
     just_print = os.getenv("JUST_PRINT", "false").lower() == "true"
-    print(f"relayer: Updating oracle data for query ID {query_id} using {contract_type} contract...")
+    logger.info(f"Updating oracle data for query ID {query_id} using {contract_type} contract...")
     
     # Initialize EVM client
     evm = EVMClient()
@@ -129,7 +131,7 @@ def update_user_oracle_data(query_id=None, contract_type="SimpleLayerUser", user
     else:
         oracle_data, error = get_oracle_data(query_id)
     if error:
-        print(f"relayer: Error getting oracle data: {error}")
+        logger.error(f"Error getting oracle data: {error}")
         return None, error
     
     if just_print:
@@ -141,10 +143,10 @@ def update_user_oracle_data(query_id=None, contract_type="SimpleLayerUser", user
     if isinstance(result, tuple) and len(result) == 2:
         tx_hash, e = result
         if e:
-            print("relayer: Error updating oracle data: ", e)
+            logger.error(f"Error updating oracle data: {e}")
             return None, e
     else:
-        print("relayer: Unexpected result from update_oracle_data: ", result)
+        logger.error(f"Unexpected result from update_oracle_data: {result}")
         return None, "Failed to update oracle data"
     
     return tx_hash, None
@@ -154,9 +156,11 @@ def start_relayer():
     query_id = os.getenv("QUERY_ID")
     sleep_time = int(os.getenv("SLEEP_TIME", "600"))
     contract_type = os.getenv("CONTRACT_TYPE", "SimpleLayerUser")
+    use_fixed_interval = os.getenv("FIXED_INTERVAL", "False").lower() == "true"
     
-    print(f"relayer: Starting relayer for query ID {query_id} using {contract_type} contract...")
-    print(f"relayer: Sleep time: {sleep_time} seconds")
+    logger.info(f"Starting relayer for query ID {query_id} using {contract_type} contract...")
+    logger.info(f"Sleep time: {sleep_time} seconds")
+    logger.info(f"Fixed interval mode: {use_fixed_interval}")
 
     evm = EVMClient()
     evm.init_web3()
@@ -167,53 +171,68 @@ def start_relayer():
             # Check layer chain status
             chain_status, error = get_layer_chain_status()
             if chain_status:
-                print(f"relayer: Layer chain status: {chain_status}")
-                sleep(sleep_time)
+                logger.warning(f"Layer chain status: {chain_status}")
+                if use_fixed_interval:
+                    fixed_interval_sleep(sleep_time)
+                else:
+                    sleep(sleep_time)
                 continue
 
             # Valset update
             e = handle_validator_set_update(evm)
             if e:
-                print(f"relayer: Error handling validator set update: {e}")
-                sleep(sleep_time)
+                logger.error(f"Error handling validator set update: {e}")
+                if use_fixed_interval:
+                    fixed_interval_sleep(sleep_time)
+                else:
+                    sleep(sleep_time)
                 continue
             
             # Update oracle data
             user_trigger_timestamp = int(time.time())
             user_data = {"user_trigger_timestamp": user_trigger_timestamp}
             
-            tx_hash, error = update_user_oracle_data(query_id, contract_type, user_data)
+            _, error = update_user_oracle_data(query_id, contract_type, user_data)
             if error:
-                print(f"relayer: Error updating oracle data: {error}")
-                sleep(sleep_time)
+                logger.error(f"Error updating oracle data: {error}")
+                if use_fixed_interval:
+                    fixed_interval_sleep(sleep_time)
+                else:
+                    sleep(sleep_time)
                 continue
             
             
         except Exception as e:
-            print(f"relayer: Unexpected error: {e}")
+            logger.error(f"Unexpected error: {e}")
         
-        sleep(sleep_time)
+        # Sleep until next relay
+        if use_fixed_interval:
+            logger.debug(f"Using fixed interval sleep ({sleep_time}s)")
+            fixed_interval_sleep(sleep_time)
+        else:
+            logger.debug(f"Using regular sleep ({sleep_time}s)")
+            sleep(sleep_time)
 
 def data_bridge_init(evm) -> Exception:
-    print("relayer: Initializing TellorDataBridge...")
+    logger.info("Initializing TellorDataBridge...")
     checkpoint_params, e = get_data_bridge_init_params()
     if e:
         return e
-    print("relayer: Checkpoint params: ", checkpoint_params)
+    logger.debug(f"Checkpoint params: {checkpoint_params}")
     init_tx_params = transform_data_bridge_init_params(checkpoint_params)
-    print("relayer: Init tx params: ", init_tx_params)
+    logger.debug(f"Init tx params: {init_tx_params}")
     init_tx = evm.init_data_bridge(init_tx_params)  # Use evm instance method
-    print("relayer: Init tx: ", init_tx)
+    logger.info(f"Init tx: {init_tx}")
     return None
 
 def data_bridge_reset(evm) -> Exception:
-    print("relayer: Resetting TellorDataBridge...")
+    logger.info("Resetting TellorDataBridge...")
     checkpoint_params, e = get_data_bridge_reset_params()
     if e:
         return e
-    print("relayer: Checkpoint params: ", checkpoint_params)
+    logger.debug(f"Checkpoint params: {checkpoint_params}")
     reset_tx_params = transform_data_bridge_reset_params(checkpoint_params)
-    print("relayer: Reset tx params: ", reset_tx_params)
+    logger.debug(f"Reset tx params: {reset_tx_params}")
     evm.reset_data_bridge(reset_tx_params)  # Use evm instance method
     return None
 
@@ -225,31 +244,31 @@ def update_to_latest_layer_validator_set(evm, data_bridge_validator_timestamp, l
         valset_update_params, e = query_validator_set_update(next_validator_timestamp)
         if e:
             return e
-        print("relayer: Valset update params: ", valset_update_params)
+        logger.debug(f"Valset update params: {valset_update_params}")
         valset_update_tx_params = transform_valset_update_params(valset_update_params)
-        print("relayer: Valset update tx params: ", valset_update_tx_params)
-        valset_update_tx = evm.update_validator_set(valset_update_tx_params)  # Use evm instance method
-        print("relayer: Submitted valset update tx")
+        logger.debug(f"Valset update tx params: {valset_update_tx_params}")
+        _ = evm.update_validator_set(valset_update_tx_params)  # Use evm instance method
+        logger.info("Submitted valset update tx")
         sleep(VALSET_SLEEP_TIME)
         layer_validator_timestamp, e = get_layer_latest_validator_timestamp()
         if e:
             return e
         data_bridge_validator_timestamp = evm.get_data_bridge_validator_timestamp()
-        print("relayer: TellorDataBridge validator timestamp: ", data_bridge_validator_timestamp)
+        logger.debug(f"TellorDataBridge validator timestamp: {data_bridge_validator_timestamp}")
 
-    print("relayer: TellorDataBridge valset up to date with Layer valset")
+    logger.info("TellorDataBridge valset up to date with Layer valset")
     return None
 
 def update_user_oracle_data_2(evm, query_id) -> Exception:
-    print("relayer: Updating oracle data...")
+    logger.info("Updating oracle data...")
     oracle_proof, e = query_latest_oracle_data(query_id)
     if e:
         return e
     current_price_data_timestamp = evm.get_current_price_data_timestamp()  # Use evm instance method
-    print("relayer: Current price data timestamp: ", current_price_data_timestamp)
-    print("relayer: Oracle proof: ", oracle_proof)
+    logger.debug(f"Current price data timestamp: {current_price_data_timestamp}")
+    logger.debug(f"Oracle proof: {oracle_proof}")
     if int(oracle_proof["attestation_data"]["timestamp"]) > int(current_price_data_timestamp):
-        print("relayer: New oracle data available, updating...")
+        logger.info("New oracle data available, updating...")
         
     return None
 
@@ -258,7 +277,7 @@ def check_layer_chain_status() -> Exception:
         return None
     message, e = get_layer_chain_status()
     if message is not None:
-        print("relayer: Layer chain status message: ", message)
+        logger.warning(f"Layer chain status message: {message}")
         e = send_email_alert("Layer chain status alert", message)
         if e:
             return e
@@ -267,21 +286,43 @@ def check_layer_chain_status() -> Exception:
 def handle_validator_set_update(evm) -> Exception:
     layer_validator_timestamp, e = get_layer_latest_validator_timestamp()
     if e:
-        print("relayer: Error getting latest Layer validator timestamp: ", e)
+        logger.error(f"Error getting latest Layer validator timestamp: {e}")
         return e
-    print("relayer: Layer validator timestamp: ", layer_validator_timestamp)
+    logger.debug(f"Layer validator timestamp: {layer_validator_timestamp}")
     data_bridge_validator_timestamp = evm.get_data_bridge_validator_timestamp()
-    print("relayer: TellorDataBridge validator timestamp: ", data_bridge_validator_timestamp)
+    logger.debug(f"TellorDataBridge validator timestamp: {data_bridge_validator_timestamp}")
     if int(data_bridge_validator_timestamp) < int(layer_validator_timestamp):
-        print("relayer: Updating to latest Layer validator set...")
+        logger.info("Updating to latest Layer validator set...")
         e = update_to_latest_layer_validator_set(evm, data_bridge_validator_timestamp, layer_validator_timestamp)
         if e:
-            print("relayer: Error updating to latest Layer validator set: ", e)
+            logger.error(f"Error updating to latest Layer validator set: {e}")
             return e
 
 def sleep(seconds):
-    print("relayer: Sleeping for ", seconds, " seconds")
+    logger.debug(f"Sleeping for {seconds} seconds")
     time.sleep(seconds)
+    return None
+
+def fixed_interval_sleep(interval_seconds):
+    """
+    Sleep for a fixed interval, starting from 1/1/2025 00:00:00 GMT
+    """
+    current_time = time.time()
+    # Basis time is 1/1/2025 00:00:00 GMT, or 1735689600
+    # Plus 5 seconds since sepolia's next block after 00:00:00 is consistently at 00:00:12
+    # This gives time to be try to be included in the next eth block
+    basis_time = 1735689600 + 5
+    diff = current_time - basis_time
+    next_sleep_time = int(diff / interval_seconds) * interval_seconds + interval_seconds + basis_time
+    sleep_duration = next_sleep_time - current_time
+    
+    # Safety check to prevent negative sleep times
+    if sleep_duration < 0:
+        logger.warning(f"Calculated negative sleep duration: {sleep_duration:.2f}s, sleeping for 0")
+        sleep_duration = 0
+    
+    logger.debug(f"Fixed interval sleep: {sleep_duration:.2f}s until next {interval_seconds}s boundary")
+    time.sleep(sleep_duration)
     return None
 
 def format_for_etherscan(attest_data, validator_set, sigs):

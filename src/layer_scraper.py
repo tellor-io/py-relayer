@@ -5,23 +5,26 @@ import csv
 import json
 import time
 import pandas as pd
+from src.logger_utils import get_logger
+
+logger = get_logger(__name__)
 
 load_dotenv()
 
 def scrape_layer(query_id, output_file, scrape_count, scrape_micro):
     status, err = get_layer_connection_status()
     if err:
-        print(f"layer_scraper: Error getting layer connection status: {err}")
+        logger.error(f"Error getting layer connection status: {err}")
         return
-    print(f"layer_scraper: Layer connection status: {status}")
+    logger.info(f"Layer connection status: {status}")
     
     # Get current power threshold
     power_threshold, err = get_current_power_threshold()
     if err:
-        print(f"layer_scraper: Error getting power threshold: {err}")
+        logger.error(f"Error getting power threshold: {err}")
         power_threshold = None
     else:
-        print(f"layer_scraper: Power threshold: {power_threshold}")
+        logger.info(f"Power threshold: {power_threshold}")
     
     # Save metadata
     metadata_file = output_file.replace('.csv', '_metadata.json')
@@ -34,7 +37,7 @@ def scrape_layer(query_id, output_file, scrape_count, scrape_micro):
     with open(metadata_file, 'w') as f:
         json.dump(metadata, f, indent=2)
     
-    print(f"layer_scraper: Saved metadata to {metadata_file}")
+    logger.info(f"Saved metadata to {metadata_file}")
     
     scrape_layer_data(query_id, output_file, scrape_count)
     if scrape_micro:
@@ -42,9 +45,9 @@ def scrape_layer(query_id, output_file, scrape_count, scrape_micro):
 
 def scrape_layer_data(query_id, output_file, scrape_count):
     csv_header = ["query_id", "aggregate_value", "aggregate_reporter", "reporter_power", "flagged", "index", "height", "micro_height", "timestamp"]
-    print(f"layer_scraper: Scraping layer data to {output_file}")
-    print(f"layer_scraper: Query ID: {query_id}")
-    print(f"layer_scraper: Scrape count: {scrape_count}")
+    logger.info(f"Scraping layer data to {output_file}")
+    logger.info(f"Query ID: {query_id}")
+    logger.info(f"Scrape count: {scrape_count}")
     # Initialize timestamp and count existing entries
     timestamp = 1000000000000000000  # default start
     existing_entries = 0
@@ -60,33 +63,33 @@ def scrape_layer_data(query_id, output_file, scrape_count):
             
             if existing_entries > 0:
                 timestamp = int(rows[0][-1])  # Get timestamp from first row (most recent entry)
-                print(f"Found {existing_entries} existing entries")
-                print(f"Resuming scrape from timestamp: {timestamp}")
+                logger.info(f"Found {existing_entries} existing entries")
+                logger.info(f"Resuming scrape from timestamp: {timestamp}")
             else:
-                print("No existing data found, starting from beginning")
+                logger.info("No existing data found, starting from beginning")
     else:
         # Write CSV header for new file
         with open(output_file, "w", newline="") as file:
             writer = csv.writer(file)
             writer.writerow(csv_header)
-        print("Created new data file")
+        logger.info("Created new data file")
 
     # Calculate remaining data points needed
     remaining_points = scrape_count - existing_entries
     if remaining_points <= 0:
-        print(f"Already have {existing_entries} entries, no additional data points needed")
+        logger.info(f"Already have {existing_entries} entries, no additional data points needed")
         return
     
-    print(f"Scraping {remaining_points} additional data points...")
+    logger.info(f"Scraping {remaining_points} additional data points...")
 
     # Rest of the scraping logic, but only for remaining points
     for _ in range(remaining_points):
         data, err = get_data_before(query_id, timestamp)
         if err:
-            print(f"Error getting data before {timestamp}: {err}")
+            logger.error(f"Error getting data before {timestamp}: {err}")
             break
 
-        print(f"Data before {timestamp}: {data}")
+        logger.info(f"Data before {timestamp}: {data}")
 
         # Extract relevant data from the response
         aggregate_data = data["aggregate"]
@@ -114,14 +117,14 @@ def scrape_layer_data(query_id, output_file, scrape_count):
         # Update timestamp to the latest report timestamp
         timestamp = data["timestamp"]
 
-    print(f"Scraped data saved to {output_file}")
+    logger.info(f"Scraped data saved to {output_file}")
 
 def scrape_micro_reports(query_id: str, aggregate_data_file: str, output_file: str = None):
     """Scrape micro reports for aggregates in aggregate_data_file"""
-    print(f"layer_scraper: Scraping micro reports for {query_id} in {aggregate_data_file}")
+    logger.info(f"Scraping micro reports for {query_id} in {aggregate_data_file}")
     if output_file is None:
         output_file = aggregate_data_file.replace('.csv', '_micro.csv')
-    print(f"layer_scraper: Output file: {output_file}")
+    logger.info(f"Output file: {output_file}")
 
     # Read the layer data
     df = pd.read_csv(aggregate_data_file)
@@ -131,7 +134,7 @@ def scrape_micro_reports(query_id: str, aggregate_data_file: str, output_file: s
     if os.path.exists(output_file):
         micro_df = pd.read_csv(output_file)
         processed_timestamps = set(micro_df['timestamp'].unique())
-        print(f"Found {len(processed_timestamps)} already processed timestamps")
+        logger.info(f"Found {len(processed_timestamps)} already processed timestamps")
     
     # Setup output CSV if it doesn't exist
     headers = ['timestamp', 'aggregate_power', 'reporter', 'power', 'consecutive_reports']
@@ -153,17 +156,17 @@ def scrape_micro_reports(query_id: str, aggregate_data_file: str, output_file: s
     
     # Process each unprocessed aggregate report
     unprocessed_df = df[~df['timestamp'].isin(processed_timestamps)].sort_values('timestamp', ascending=False)
-    print(f"Processing {len(unprocessed_df)} new aggregate reports")
+    logger.info(f"Processing {len(unprocessed_df)} new aggregate reports")
     
     for _, row in unprocessed_df.iterrows():
-        print(f"layer_scraper: Processing aggregate at timestamp {row['timestamp']}")
+        logger.info(f"Processing aggregate at timestamp {row['timestamp']}")
         timestamp = row['timestamp']
         aggregate_power = row['reporter_power']
         
         # Get micro reports for this aggregate
         micro_reports_response, err = get_reports_by_aggregate(query_id, int(timestamp))
         if err:
-            print(f"Error getting reports by aggregate: {err}")
+            logger.error(f"Error getting reports by aggregate: {err}")
             continue
             
         # Prepare all rows for this timestamp
@@ -200,6 +203,6 @@ def scrape_micro_reports(query_id: str, aggregate_data_file: str, output_file: s
             writer = csv.writer(f)
             writer.writerows(timestamp_rows)
         
-        print(f"Wrote {len(timestamp_rows)} micro reports for timestamp {timestamp}")
+        logger.info(f"Wrote {len(timestamp_rows)} micro reports for timestamp {timestamp}")
     
-    print(f"Micro report data saved to {output_file}")
+    logger.info(f"Micro report data saved to {output_file}")

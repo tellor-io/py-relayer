@@ -1,5 +1,8 @@
 from abc import ABC, abstractmethod
 import time
+from src.logger_utils import get_logger
+
+logger = get_logger(__name__)
 
 class ContractAdapter(ABC):
     """Base adapter class for different contract interfaces"""
@@ -36,12 +39,12 @@ class SimpleLayerUserAdapter(ContractAdapter):
         }
     
     def update_oracle_data(self, contract, params):
-        print(f"SimpleLayerUserAdapter: Calling updateOracleData with params:")
-        print(f"  attestation_data: {type(params['attestation_data'])}")
-        print(f"  current_validator_set: {type(params['current_validator_set'])}")
-        print(f"  signatures: {type(params['signatures'])}")
-        print(f"  user_trigger_timestamp: {params['user_trigger_timestamp']}")
-        print(f"  begin_relay_timestamp: {params['begin_relay_timestamp']}")
+        logger.debug("SimpleLayerUserAdapter: Calling updateOracleData with params:")
+        logger.debug(f"  attestation_data: {type(params['attestation_data'])}")
+        logger.debug(f"  current_validator_set: {type(params['current_validator_set'])}")
+        logger.debug(f"  signatures: {type(params['signatures'])}")
+        logger.debug(f"  user_trigger_timestamp: {params['user_trigger_timestamp']}")
+        logger.debug(f"  begin_relay_timestamp: {params['begin_relay_timestamp']}")
         return contract.functions.updateOracleData(
             params["attestation_data"],
             params["current_validator_set"],
@@ -90,12 +93,12 @@ class TestPriceFeedUserAdapter(ContractAdapter):
         Returns:
             ContractFunction: The contract function to call
         """
-        # Print parameters for debugging
-        print(f"TestPriceFeedUserAdapter: Calling updateOracleData2 with params:")
-        print(f"  attestation_data: {type(params['attestation_data'])}")
-        print(f"  current_validator_set: {type(params['current_validator_set'])}")
-        print(f"  signatures: {type(params['signatures'])}")
-        print(f"  init_timestamp: {params['init_timestamp']}")
+        # Log parameters for debugging
+        logger.debug("TestPriceFeedUserAdapter: Calling updateOracleData2 with params:")
+        logger.debug(f"  attestation_data: {type(params['attestation_data'])}")
+        logger.debug(f"  current_validator_set: {type(params['current_validator_set'])}")
+        logger.debug(f"  signatures: {type(params['signatures'])}")
+        logger.debug(f"  init_timestamp: {params['init_timestamp']}")
         
         return contract.functions.updateOracleData2(
             params["attestation_data"],
@@ -139,11 +142,11 @@ class YoloTellorUserAdapter(ContractAdapter):
         Returns:
             ContractFunction: The contract function to call
         """
-        # Print parameters for debugging
-        print(f"YoloTellorUserAdapter: Calling updateOracleData with params:")
-        print(f"  attestation_data: {type(params['attestation_data'])}")
-        print(f"  current_validator_set: {type(params['current_validator_set'])}")
-        print(f"  signatures: {type(params['signatures'])}")
+        # Log parameters for debugging
+        logger.debug("YoloTellorUserAdapter: Calling updateOracleData with params:")
+        logger.debug(f"  attestation_data: {type(params['attestation_data'])}")
+        logger.debug(f"  current_validator_set: {type(params['current_validator_set'])}")
+        logger.debug(f"  signatures: {type(params['signatures'])}")
         
         return contract.functions.updateOracleData(
             params["attestation_data"],
