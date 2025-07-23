@@ -135,7 +135,7 @@ def update_user_oracle_data(query_id=None, contract_type="SimpleLayerUser", user
         return None, error
     
     if just_print:
-        format_for_etherscan(oracle_data["oracle_attestation_data"], oracle_data["current_validator_set"], oracle_data["sigs"])
+        print_oracle_relay_for_etherscan(oracle_data["oracle_attestation_data"], oracle_data["current_validator_set"], oracle_data["sigs"])
         return None, None
     
     # Update oracle data using the appropriate contract
@@ -233,6 +233,12 @@ def data_bridge_reset(evm) -> Exception:
     logger.debug(f"Checkpoint params: {checkpoint_params}")
     reset_tx_params = transform_data_bridge_reset_params(checkpoint_params)
     logger.debug(f"Reset tx params: {reset_tx_params}")
+    
+    just_print = os.getenv("JUST_PRINT", "false").lower() == "true"
+    if just_print:
+        print_reset_for_etherscan(reset_tx_params)
+        return None
+    
     evm.reset_data_bridge(reset_tx_params)  # Use evm instance method
     return None
 
@@ -325,7 +331,7 @@ def fixed_interval_sleep(interval_seconds):
     time.sleep(sleep_duration)
     return None
 
-def format_for_etherscan(attest_data, validator_set, sigs):
+def print_oracle_relay_for_etherscan(attest_data, validator_set, sigs):
     # Format _attestData
     query_id = "0x" + attest_data['queryId'].hex()
     report = attest_data['report']
@@ -356,3 +362,41 @@ def format_for_etherscan(attest_data, validator_set, sigs):
     print("\n3. _sigs (tuple[]):")
     print(sigs_formatted)
     print("\n===== END OF FORMATTED PARAMETERS FOR ETHERSCAN =====\n\n\n\n")
+
+def print_reset_for_etherscan(reset_tx_params):
+    from web3 import Web3
+    
+    power_threshold = reset_tx_params["power_threshold"]
+    validator_timestamp = reset_tx_params["validator_timestamp"]
+    validator_set_checkpoint = reset_tx_params["validator_set_checkpoint"]
+    
+    # Format individual parameters for etherscan
+    print("\n\n\n\n")
+    print("===== START OF FORMATTED PARAMETERS FOR ETHERSCAN =====")
+    print("\n1. _powerThreshold (uint256):")
+    print(power_threshold)
+    print("\n2. _validatorTimestamp (uint256):")
+    print(validator_timestamp)
+    print("\n3. _validatorSetCheckpoint (bytes32):")
+    print("0x" + validator_set_checkpoint.hex())
+    print("\n====== END OF FORMATTED PARAMETERS FOR ETHERSCAN ======")
+    
+    # Generate function selector for guardianResetValidatorSet(uint256,uint256,bytes32)
+    function_signature = "guardianResetValidatorSet(uint256,uint256,bytes32)"
+    function_selector = Web3.keccak(text=function_signature)[:4]
+    
+    # Encode the parameters using eth_abi directly
+    from eth_abi import encode
+    encoded_params = encode(
+        ["uint256", "uint256", "bytes32"],
+        [power_threshold, validator_timestamp, validator_set_checkpoint]
+    )
+    
+    # Combine function selector and encoded parameters
+    full_calldata = function_selector.hex() + encoded_params.hex()
+    
+    print("\n\n\n\n============ COMPLETE TRANSACTION CALLDATA ============")
+    print("\nFunction: \nguardianResetValidatorSet(uint256,uint256,bytes32)")
+    print("\nComplete calldata (hex):")
+    print(full_calldata)
+    print("\n============= END OF TRANSACTION CALLDATA =============\n\n\n\n")

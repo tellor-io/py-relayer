@@ -129,11 +129,13 @@ def init(eth_private_key, data_bridge_address, web3_provider, layer_swagger, ver
         exit(1)
 
 @cli.command()
+@add_logging_options
 @click.option('--eth-private-key', envvar='ETH_PRIVATE_KEY', required=True, help='Ethereum private key')
 @click.option('--data-bridge-address', envvar='DATA_BRIDGE_CONTRACT_ADDRESS', required=True, help='Tellor data bridge contract address')
 @click.option('--web3-provider', envvar='WEB3_PROVIDER_URL', required=True, help='Web3 provider URL')
 @click.option('--layer-swagger', envvar='LAYER_SWAGGER_ENDPOINT', required=True, help='Layer swagger endpoint')
-def reset(eth_private_key, data_bridge_address, web3_provider, layer_swagger, verbose, no_color):
+@click.option('--just-print', is_flag=True, help='Just print the reset parameters without submitting transaction')
+def reset(eth_private_key, data_bridge_address, web3_provider, layer_swagger, just_print, verbose, no_color):
     """Reset Tellor data bridge contract"""
     configure_logging(verbose=verbose, no_color=no_color)
 
@@ -141,6 +143,7 @@ def reset(eth_private_key, data_bridge_address, web3_provider, layer_swagger, ve
     os.environ['DATA_BRIDGE_CONTRACT_ADDRESS'] = to_checksum_address(data_bridge_address)
     os.environ['WEB3_PROVIDER_URL'] = web3_provider
     os.environ['LAYER_SWAGGER_ENDPOINT'] = layer_swagger
+    os.environ['JUST_PRINT'] = str(just_print)
     
     try:
         evm = EVMClient()
