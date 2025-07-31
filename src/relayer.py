@@ -303,6 +303,7 @@ def handle_validator_set_update(evm) -> Exception:
         if e:
             logger.error(f"Error updating to latest Layer validator set: {e}")
             return e
+        
 
 def sleep(seconds):
     logger.debug(f"Sleeping for {seconds} seconds")
