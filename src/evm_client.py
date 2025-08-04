@@ -163,7 +163,7 @@ class EVMClient:
             ).build_transaction({
                 'from': self.web3_acct.address,
                 'nonce': self.web3_instance.eth.get_transaction_count(self.web3_acct.address),
-                'gas': 2000000,  
+                'gas': 1000000,  
                 'gasPrice': int(self.web3_instance.eth.gas_price * 1.25),
             })
             logger.info(f"Tx: {tx}")
