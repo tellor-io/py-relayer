@@ -1,15 +1,19 @@
+import time
+import os
+import requests
 from src.layer_client import query_validator_set_update, query_latest_oracle_data, get_data_bridge_init_params, get_layer_latest_validator_timestamp, get_next_validator_set_timestamp, get_layer_chain_status, get_data_bridge_reset_params, query_latest_oracle_data, get_attestation_data_before, get_current_power_threshold, get_oracle_proof, get_layer_connection_status
 from src.evm_client import EVMClient  # Only import the class
 from src.transformer import transform_data_bridge_init_params, transform_valset_update_params, transform_oracle_update_params, transform_data_bridge_reset_params
 from src.email_client import send_email_alert
-from src.layer_tx_client import request_attestations
+from src.layer_tx_client import request_attestations, tip
 from src.logger_utils import get_logger
-import time
-import os
 
 logger = get_logger(__name__)
 
 VALSET_SLEEP_TIME = 1
+
+# Global variables for threshold relayer
+next_heartbeat_time = 0
 
 def get_oracle_data(query_id):
     """
@@ -80,12 +84,12 @@ def get_oracle_data_optimized(query_id, optimistic_delay=900, max_attestation_ag
             # report has too little stake
             logger.warning("Report has too little stake")
             # TODO: implement tip, request new report?
-            return None, "Report has too little stake"
+            return None, "Report has too little stake. Add a tip."
     
     # check report and attestation data age
     if int(time.time()) * 1000 - int(attestation_data["timestamp"]) > max_data_age * 1000:
         # report is too old, no good data
-        return None, f"Report is too old. Report timestamp: {attestation_data['timestamp']} Current timestamp: {int(time.time()) * 1000}"
+        return None, f"Report is too old. Add a tip. Report timestamp: {attestation_data['timestamp']} Current timestamp: {int(time.time()) * 1000}"
     if int(time.time()) * 1000 - int(attestation_data["attestation_timestamp"]) > max_attestation_age * 1000:
         # attestation is too old, request new attestations
         logger.warning("Attestation is too old, requesting new attestations")
@@ -157,6 +161,7 @@ def start_relayer():
     sleep_time = int(os.getenv("SLEEP_TIME", "600"))
     contract_type = os.getenv("CONTRACT_TYPE", "SimpleLayerUser")
     use_fixed_interval = os.getenv("FIXED_INTERVAL", "False").lower() == "true"
+    price_threshold = os.getenv("PRICE_THRESHOLD", "0")
     
     logger.info(f"Starting relayer for query ID {query_id} using {contract_type} contract...")
     logger.info(f"Sleep time: {sleep_time} seconds")
@@ -206,12 +211,95 @@ def start_relayer():
             logger.error(f"Unexpected error: {e}")
         
         # Sleep until next relay
-        if use_fixed_interval:
-            logger.debug(f"Using fixed interval sleep ({sleep_time}s)")
-            fixed_interval_sleep(sleep_time)
+        if float(price_threshold) > 0:
+            sleep(2) # TODO: make this configurable
+            if heartbeat_or_threshold_should_relay(evm, sleep_time, float(price_threshold)):
+                update_user_oracle_data()
         else:
-            logger.debug(f"Using regular sleep ({sleep_time}s)")
-            sleep(sleep_time)
+            if use_fixed_interval:
+                logger.debug(f"Using fixed interval sleep ({sleep_time}s)")
+                fixed_interval_sleep(sleep_time)
+            else:
+                logger.debug(f"Using regular sleep ({sleep_time}s)")
+                sleep(sleep_time)
+
+def heartbeat_or_threshold_should_relay(evm_client, sleep_time, price_threshold):
+    """
+    Check if the heartbeat or threshold should relay.
+    """
+    # init heartbeat
+    global next_heartbeat_time
+    if next_heartbeat_time == 0:
+        next_heartbeat_time = get_next_heartbeat_time(sleep_time)
+        return False
+
+    # get last relayed data
+    last_relayed_data = evm_client.get_last_relayed_data("TellorDataBank")
+    logger.debug(f"Last relayed data: {last_relayed_data}")
+
+    # check if heartbeat should relay
+    if int(time.time()) >= next_heartbeat_time:
+        # we passed the next heartbeat timestamp - reset heartbeat
+        next_heartbeat_time = get_next_heartbeat_time(sleep_time)
+        logger.debug(f"Passed heartbeat timestamp - next heartbeat timestamp: {next_heartbeat_time}")
+        if last_relayed_data["timestamp"] < next_heartbeat_time * 1000:  # convert to milliseconds
+            # and no data has been relayed - so return true
+            return True
+        # otherwise, new data has been relayed, but we continue to check for threshold change
+    
+    # check for threshold change
+    current_price = get_current_price_from_api()
+    last_price = last_relayed_data["value"][0]
+    price_change_percentage = abs(current_price - last_price) / last_price
+    logger.debug(f"Current price: {current_price}, last price: {last_price}")
+    logger.debug(f"Price change percentage: {price_change_percentage * 100}%")
+    if price_change_percentage > price_threshold:
+        return True
+    return False
+
+def get_current_price_from_api():
+    """
+    Get the current price from the API or Layer chain
+    """
+    api_url = os.getenv("PRICE_API_URL")
+    
+    if api_url:
+        try:
+            response = requests.get(api_url, timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                logger.debug(f"API response: {data}")
+                # Handle different API response formats
+                if "usd" in data:
+                    logger.debug(f"Price from API: {data['usd']}")
+                    return float(data["usd"])
+                elif isinstance(data, list) and len(data) > 0 and "usd" in data[0]:
+                    logger.debug(f"Price from API: {data[0]['usd']}")
+                    return float(data[0]["usd"])
+                # Handle CoinGecko format: {'bitcoin': {'usd': 116918}}
+                elif isinstance(data, dict):
+                    for coin_name, coin_data in data.items():
+                        if isinstance(coin_data, dict) and "usd" in coin_data:
+                            logger.debug(f"Price from API ({coin_name}): {coin_data['usd']}")
+                            return float(coin_data["usd"])
+                
+                logger.warning(f"Unexpected API response format: {data}")
+                return None
+        except Exception as e:
+            logger.warning(f"Failed to get price from API: {e}")
+    
+    # Fallback to Layer chain data
+    logger.info("Falling back to Layer chain for current price")
+    query_id = os.getenv("QUERY_ID")
+    oracle_data, error = query_latest_oracle_data(query_id)
+    if error:
+        logger.error(f"Failed to get price from Layer: {error}")
+        return None
+    
+    # Decode price from oracle data
+    value_bytes = oracle_data["attestation_data"]["report"]["value"]
+    return int.from_bytes(value_bytes, "big")
+
 
 def data_bridge_init(evm) -> Exception:
     logger.info("Initializing TellorDataBridge...")
@@ -315,13 +403,8 @@ def fixed_interval_sleep(interval_seconds):
     Sleep for a fixed interval, starting from 1/1/2025 00:00:00 GMT
     """
     current_time = time.time()
-    # Basis time is 1/1/2025 00:00:00 GMT, or 1735689600
-    # Plus 5 seconds since sepolia's next block after 00:00:00 is consistently at 00:00:12
-    # This gives time to be try to be included in the next eth block
-    basis_time = 1735689600 + 5
-    diff = current_time - basis_time
-    next_sleep_time = int(diff / interval_seconds) * interval_seconds + interval_seconds + basis_time
-    sleep_duration = next_sleep_time - current_time
+    next_heartbeat_time = get_next_heartbeat_time(interval_seconds)
+    sleep_duration = next_heartbeat_time - current_time
     
     # Safety check to prevent negative sleep times
     if sleep_duration < 0:
@@ -331,6 +414,20 @@ def fixed_interval_sleep(interval_seconds):
     logger.debug(f"Fixed interval sleep: {sleep_duration:.2f}s until next {interval_seconds}s boundary")
     time.sleep(sleep_duration)
     return None
+
+def get_next_heartbeat_time(interval_seconds):
+    """
+    Get the next heartbeat time for a fixed interval
+    """
+    current_time = time.time()
+    # Basis time is 1/1/2025 00:00:00 GMT, or 1735689600
+    # Plus 5 seconds since sepolia's next block after 00:00:00 is consistently at 00:00:12
+    # This gives time to be try to be included in the next eth block
+    # TODO: make this offset configurable
+    basis_time = 1735689600 + 5
+    diff = current_time - basis_time
+    next_heartbeat_time = int(diff / interval_seconds) * interval_seconds + interval_seconds + basis_time
+    return next_heartbeat_time
 
 def print_oracle_relay_for_etherscan(attest_data, validator_set, sigs):
     # Format _attestData
@@ -401,3 +498,125 @@ def print_reset_for_etherscan(reset_tx_params):
     print("\nComplete calldata (hex):")
     print(full_calldata)
     print("\n============= END OF TRANSACTION CALLDATA =============\n\n\n\n")
+
+def start_threshold_relayer():
+    """Start the threshold relayer process (heartbeat + price threshold)"""
+    query_id = os.getenv("QUERY_ID")
+    sleep_time = int(os.getenv("SLEEP_TIME", "600"))
+    price_threshold = float(os.getenv("PRICE_THRESHOLD", "0"))
+    check_interval = int(os.getenv("CHECK_INTERVAL", "60"))
+    contract_type = "TellorDataBank"
+    
+    # Oracle data optimization parameters
+    optimistic_delay = int(os.getenv("OPTIMISTIC_DELAY", "900"))
+    max_attestation_age = int(os.getenv("MAX_ATTESTATION_AGE", "600"))
+    max_data_age = int(os.getenv("MAX_DATA_AGE", "14400"))
+    min_stake_percentage = int(os.getenv("MIN_STAKE_PERCENTAGE", "33"))
+    
+    logger.info(f"Starting threshold relayer for query ID {query_id} using {contract_type} contract...")
+    logger.info(f"Heartbeat interval: {sleep_time} seconds")
+    logger.info(f"Price threshold: {price_threshold * 100}%")
+    logger.info(f"Check interval: {check_interval} seconds")
+
+    evm = EVMClient()
+    evm.init_web3()
+    evm.setup_data_bridge_contract()
+    
+    # Do initial relay to establish baseline
+    logger.info("Performing initial relay...")
+    user_data = {"user_trigger_timestamp": int(time.time())}
+    _, error = update_user_oracle_data_optimized(query_id, contract_type, user_data, 
+                                               optimistic_delay, max_attestation_age, 
+                                               max_data_age, min_stake_percentage)
+    if error:
+        logger.error(f"Initial relay failed: {error}")
+    
+    global next_heartbeat_time
+    next_heartbeat_time = get_next_heartbeat_time(sleep_time)
+    logger.info(f"Next heartbeat time: {next_heartbeat_time}")
+    
+    while True:
+        try:
+            # Check layer chain status
+            chain_status, error = get_layer_chain_status()
+            if chain_status:
+                logger.warning(f"Layer chain status: {chain_status}")
+                time.sleep(check_interval)
+                continue
+
+            # Valset update
+            e = handle_validator_set_update(evm)
+            if e:
+                logger.error(f"Error handling validator set update: {e}")
+                time.sleep(check_interval)
+                continue
+            
+            # Check if we should relay (heartbeat or threshold)
+            if heartbeat_or_threshold_should_relay(evm, sleep_time, price_threshold):
+                logger.info("Relay condition met, updating oracle data...")
+                user_data = {"user_trigger_timestamp": int(time.time())}
+                chain_id = chain_status.get("result").get("node_info").get("network")
+                _, error = update_user_oracle_data_optimized(query_id, contract_type, user_data,
+                                                           optimistic_delay, max_attestation_age,
+                                                           max_data_age, min_stake_percentage, chain_id)
+                if error:
+                    logger.error(f"Error updating oracle data: {error}")
+            
+        except Exception as e:
+            logger.error(f"Unexpected error: {e}")
+        
+        # Sleep for check interval
+        sleep(check_interval)
+
+def update_user_oracle_data_optimized(query_id=None, contract_type="TellorDataBank", user_data=None, 
+                                     optimistic_delay=900, max_attestation_age=600, max_data_age=14400, 
+                                     min_stake_percentage=33, chain_id="layertest-4"):
+    """
+    Update oracle data using optimized oracle data retrieval for TellorDataBank
+    """
+    if query_id is None:
+        query_id = os.getenv("QUERY_ID")
+    
+    just_print = os.getenv("JUST_PRINT", "false").lower() == "true"
+    logger.info(f"Updating oracle data for query ID {query_id} using {contract_type} contract...")
+    
+    # Initialize EVM client
+    evm = EVMClient()
+    evm.init_web3()
+    
+    # Get optimized oracle data
+    tip_count = 0
+    max_tips = 3
+    bool_get_data = True
+    while bool_get_data:
+        oracle_data, error = get_oracle_data_optimized(query_id, optimistic_delay, max_attestation_age, 
+                                                    max_data_age, min_stake_percentage)
+        if error:
+            # If the error string contains "Add a tip.", add a tip and try again
+            if "Add a tip." in error and tip_count < max_tips:
+                tip_count += 1
+                tip(os.getenv("QUERY_DATA"), os.getenv("LAYER_ADDRESS"), os.getenv("LAYER_RPC_ENDPOINT"), chain_id)
+                sleep(3)
+            else:
+                logger.error(f"Error getting oracle data: {error}")
+                return None, error
+        else:
+            bool_get_data = False
+    
+    if just_print:
+        print_oracle_relay_for_etherscan(oracle_data["oracle_attestation_data"], 
+                                       oracle_data["current_validator_set"], oracle_data["sigs"])
+        return None, None
+    
+    # Update oracle data using the TellorDataBank contract
+    result = evm.update_oracle_data(oracle_data, contract_type, user_data)
+    if isinstance(result, tuple) and len(result) == 2:
+        tx_hash, e = result
+        if e:
+            logger.error(f"Error updating oracle data: {e}")
+            return None, e
+    else:
+        logger.error(f"Unexpected result from update_oracle_data: {result}")
+        return None, "Failed to update oracle data"
+    
+    return tx_hash, None

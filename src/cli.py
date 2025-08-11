@@ -1,7 +1,7 @@
 import click
 from dotenv import load_dotenv
 import os
-from src.relayer import start_relayer, data_bridge_init, data_bridge_reset, update_user_oracle_data
+from src.relayer import start_relayer, update_user_oracle_data, data_bridge_init, data_bridge_reset, start_threshold_relayer
 from src.bridge_client import relay_withdraw
 from src.evm_client import EVMClient
 from src.tipper import start_tipper
@@ -71,7 +71,7 @@ def cli(ctx, verbose, no_color):
 @click.option('--web3-provider', envvar='WEB3_PROVIDER_URL', required=True, help='Web3 provider URL')
 @click.option('--layer-swagger', envvar='LAYER_SWAGGER_ENDPOINT', required=True, help='Layer swagger endpoint')
 @click.option('--layer-rpc', envvar='LAYER_RPC_ENDPOINT', required=True, help='Layer RPC endpoint')
-@click.option('--contract-type', type=click.Choice(['SimpleLayerUser', 'TestPriceFeedUser', 'YoloTellorUser']), 
+@click.option('--contract-type', type=click.Choice(['SimpleLayerUser', 'TestPriceFeedUser', 'YoloTellorUser', 'TellorDataBank']), 
               default='SimpleLayerUser', help='Type of contract to use for relaying')
 @click.option('--layer-tx-creator-address', envvar='LAYER_ADDRESS', required=True, help='Local keyring address used for creating transactions on layer')
 @click.option('--just-print', is_flag=True, help='Just print the oracle data parameters without submitting transaction')
@@ -303,6 +303,65 @@ def relay_valset(sleep_time, fixed_interval, eth_private_key, web3_provider, lay
         exit(0)
     except Exception as e:
         logger.error(f"Error starting valset relayer: {e}")
+        exit(1)
+
+@cli.command()
+@add_logging_options
+@click.option('--query-id', envvar='QUERY_ID', required=True, help='Query ID to relay')
+@click.option('--query-data', envvar='QUERY_DATA', required=True, help='Query data to relay')
+@click.option('--sleep-time', envvar='SLEEP_TIME', type=int, default=600, help='Sleep time between heartbeats in seconds')
+@click.option('--price-threshold', envvar='PRICE_THRESHOLD', type=float, required=True, help='Price change threshold as decimal (e.g., 0.01 for 1%)')
+@click.option('--check-interval', envvar='CHECK_INTERVAL', type=int, default=60, help='Interval between price checks in seconds')
+@click.option('--price-api-url', envvar='PRICE_API_URL', help='Price API URL (optional, falls back to Layer chain)')
+@click.option('--eth-private-key', envvar='ETH_PRIVATE_KEY', required=True, help='Ethereum private key')
+@click.option('--data-bridge-address', envvar='DATA_BRIDGE_CONTRACT_ADDRESS', required=True, help='Tellor data bridge contract address')
+@click.option('--layer-user-address', envvar='LAYER_USER_CONTRACT_ADDRESS', required=True, help='TellorDataBank contract address')
+@click.option('--web3-provider', envvar='WEB3_PROVIDER_URL', required=True, help='Web3 provider URL')
+@click.option('--layer-swagger', envvar='LAYER_SWAGGER_ENDPOINT', required=True, help='Layer swagger endpoint')
+@click.option('--layer-rpc', envvar='LAYER_RPC_ENDPOINT', required=True, help='Layer RPC endpoint')
+@click.option('--layer-tx-creator-address', envvar='LAYER_ADDRESS', required=True, help='Local keyring address used for creating transactions on layer')
+@click.option('--optimistic-delay', envvar='OPTIMISTIC_DELAY', type=int, default=900, help='Optimistic delay in seconds')
+@click.option('--max-attestation-age', envvar='MAX_ATTESTATION_AGE', type=int, default=600, help='Max attestation age in seconds')
+@click.option('--max-data-age', envvar='MAX_DATA_AGE', type=int, default=14400, help='Max data age in seconds')
+@click.option('--min-stake-percentage', envvar='MIN_STAKE_PERCENTAGE', type=int, default=33, help='Min stake percentage for optimistic data')
+@click.option('--just-print', is_flag=True, help='Just print the oracle data parameters without submitting transaction')
+def relay_threshold(query_id, query_data, sleep_time, price_threshold, check_interval, price_api_url, eth_private_key, 
+                   web3_provider, layer_swagger, layer_rpc, data_bridge_address, layer_user_address, 
+                   layer_tx_creator_address, optimistic_delay, max_attestation_age, max_data_age, 
+                   min_stake_percentage, just_print, verbose, no_color):
+    """Start the threshold relayer process (heartbeat + price threshold)"""
+    configure_logging(verbose=verbose, no_color=no_color)
+    
+    # Set environment variables
+    os.environ['ETH_PRIVATE_KEY'] = to_checksum_address(eth_private_key)
+    os.environ['WEB3_PROVIDER_URL'] = web3_provider
+    os.environ['LAYER_SWAGGER_ENDPOINT'] = layer_swagger
+    os.environ['LAYER_RPC_ENDPOINT'] = layer_rpc
+    os.environ['DATA_BRIDGE_CONTRACT_ADDRESS'] = to_checksum_address(data_bridge_address)
+    os.environ['LAYER_USER_CONTRACT_ADDRESS'] = to_checksum_address(layer_user_address)
+    os.environ['QUERY_ID'] = query_id
+    os.environ['QUERY_DATA'] = query_data
+    os.environ['SLEEP_TIME'] = str(sleep_time)
+    os.environ['PRICE_THRESHOLD'] = str(price_threshold)
+    os.environ['CHECK_INTERVAL'] = str(check_interval)
+    os.environ['CONTRACT_TYPE'] = 'TellorDataBank'
+    os.environ['JUST_PRINT'] = str(just_print)
+    os.environ['LAYER_ADDRESS'] = to_checksum_address(layer_tx_creator_address)
+    os.environ['OPTIMISTIC_DELAY'] = str(optimistic_delay)
+    os.environ['MAX_ATTESTATION_AGE'] = str(max_attestation_age)
+    os.environ['MAX_DATA_AGE'] = str(max_data_age)
+    os.environ['MIN_STAKE_PERCENTAGE'] = str(min_stake_percentage)
+    
+    if price_api_url:
+        os.environ['PRICE_API_URL'] = price_api_url
+    
+    try:
+        start_threshold_relayer()
+    except KeyboardInterrupt:
+        logger.info("\nThreshold relayer stopped by user.")
+        exit(0)
+    except Exception as e:
+        logger.error(f"Error starting threshold relayer: {e}")
         exit(1)
 
 if __name__ == '__main__':

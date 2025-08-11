@@ -90,6 +90,13 @@ class EVMClient:
         self.layer_user_contract = self.web3_instance.eth.contract(address=layer_user_address, abi=abi)
         logger.info(f"Layer user contract: {self.layer_user_contract.address}")
 
+    def setup_tellor_data_bank_contract(self):
+        layer_user_address = os.getenv("LAYER_USER_CONTRACT_ADDRESS")
+        with open("abis/TellorDataBank.json") as f:
+            abi = json.load(f)["abi"]
+        self.layer_user_contract = self.web3_instance.eth.contract(address=layer_user_address, abi=abi)
+        logger.info(f"Tellor data bank contract: {self.layer_user_contract.address}")
+
     def get_web3_instance(self):
         return self.web3_instance
 
@@ -203,6 +210,10 @@ class EVMClient:
             elif contract_type == "YoloTellorUser":
                 if not self.layer_user_contract:
                     self.setup_yolo_tellor_user_contract()
+                contract = self.layer_user_contract
+            elif contract_type == "TellorDataBank":
+                if not self.layer_user_contract:
+                    self.setup_tellor_data_bank_contract()
                 contract = self.layer_user_contract
             else:
                 return None, f"Unsupported contract type: {contract_type}"
@@ -331,3 +342,26 @@ class EVMClient:
         if not self.token_bridge_contract:
             raise Exception("Token bridge contract not initialized")
         return self.token_bridge_contract.functions.withdrawClaimed(withdraw_id).call()
+
+    def get_last_relayed_data(self, contract_type="TellorDataBank"):
+        """
+        Get the last relayed data from the user contract
+        Returns decoded data in a standardized format
+        """
+        from src.contract_adapters import get_contract_adapter, adapter_can_read_data
+        
+        if not self.layer_user_contract:
+            # Setup appropriate contract based on type
+            if contract_type == "TellorDataBank":
+                self.setup_tellor_data_bank_contract()
+            elif contract_type == "TestPriceFeedUser":
+                self.setup_layer_test_user_contract()
+            # Add other contract types as needed
+        
+        adapter = get_contract_adapter(contract_type)
+        if not adapter or not adapter_can_read_data(adapter):
+            raise Exception(f"Contract type {contract_type} does not support reading data")
+        
+        query_id = os.getenv("QUERY_ID")
+        raw_data = adapter.get_last_relayed_data(self.layer_user_contract, query_id).call()
+        return adapter.decode_last_relayed_data(raw_data)

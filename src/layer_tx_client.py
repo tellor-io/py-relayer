@@ -4,22 +4,25 @@ import subprocess
 
 logger = get_logger(__name__)
 
-def tip(query_data, layer_address, layer_rpc_endpoint) -> Exception:
-    # Remove '0x' prefix if it exists
-    query_data_stripped = strip_0x(query_data)
-    
+def tip(query_data, layer_address, layer_rpc_endpoint, chain_id="layertest-4") -> Exception:
+    # ensure all parameters are strings for subprocess
+    # remove 0x prefix if it exists
+    query_data_stripped = strip_0x(str(query_data))
+    layer_address_str = str(layer_address)
+    layer_rpc_endpoint_str = str(layer_rpc_endpoint)
+    chain_id_str = str(chain_id)
+
     try:
         result = subprocess.run(
             ["layerd", "tx", "oracle", "tip",
-             layer_address,  
              query_data_stripped,
-             "100000loya", 
-             "--from", layer_address, 
-             "--chain-id", "layertest-3", 
+             "10000loya", 
+             "--from", layer_address_str, 
+             "--chain-id", chain_id_str, 
              "--fees", "5loya", 
              "--keyring-backend", "test", 
              "--yes", 
-             "--node=" + layer_rpc_endpoint],
+             "--node=" + layer_rpc_endpoint_str],
             capture_output=True,
             text=True,
             check=True
@@ -33,7 +36,7 @@ def tip(query_data, layer_address, layer_rpc_endpoint) -> Exception:
         logger.error(f"stderr: {e.stderr}")
         raise
 
-def request_attestations(query_id, timestamp, layer_address, layer_rpc_endpoint, chain_id="layertest-3") -> Exception:
+def request_attestations(query_id, timestamp, layer_address, layer_rpc_endpoint, chain_id="layertest-4") -> Exception:
     try:
         # ensure all parameters are strings for subprocess
         # remove 0x prefix if it exists
