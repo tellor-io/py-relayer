@@ -1,0 +1,17 @@
+{
+    "type": "TRBBridge",
+    "abi": [
+        {
+            "type": "bool",
+            "name": "toLayer"
+        },
+        {
+            "type": "uint256",
+            "name": "value"
+        }
+    ],
+    "response": {
+        "type": "(address,string,uint256,uint256)",
+        "packed": false
+    }
+} 

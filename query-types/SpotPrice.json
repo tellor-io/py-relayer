@@ -1,0 +1,17 @@
+{
+    "type": "SpotPrice",
+    "abi": [
+        {
+            "type": "string",
+            "name": "asset"
+        },
+        {
+            "type": "string", 
+            "name": "currency"
+        }
+    ],
+    "response": {
+        "type": "ufixed256x18",
+        "packed": false
+    }
+} 

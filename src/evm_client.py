@@ -3,12 +3,100 @@ import json
 import os
 from dotenv import load_dotenv
 import time
+import random
 from src.contract_adapters import get_contract_adapter
 from src.logger_utils import get_logger
 
 logger = get_logger(__name__)
 
 load_dotenv()
+
+def is_nonce_error(error) -> bool:
+    """
+    Check if an error is a nonce/sequence conflict that can be retried.
+    
+    Args:
+        error: Exception or error object to check
+    
+    Returns:
+        bool: True if this is a nonce conflict that should be retried
+    """
+    error_str = str(error).lower()
+    nonce_error_patterns = [
+        'invalid nonce',
+        'nonce too low',
+        'nonce too high', 
+        'invalid sequence',
+        'replacement transaction underpriced',
+        'already known'
+    ]
+    
+    return any(pattern in error_str for pattern in nonce_error_patterns)
+
+def send_transaction_with_retry(web3_instance, web3_acct, contract_function, base_tx_params, 
+                               max_retries=5, base_delay=1.0, max_delay=60.0, jitter=True):
+    """
+    Send a transaction with exponential backoff retry logic for nonce conflicts.
+    
+    Args:
+        web3_instance: Web3 instance
+        web3_acct: Web3 account object
+        contract_function: Contract function to call
+        base_tx_params: Base transaction parameters (without nonce)
+        max_retries: Maximum number of retry attempts
+        base_delay: Base delay in seconds for exponential backoff
+        max_delay: Maximum delay between retries
+        jitter: Whether to add random jitter to prevent thundering herd
+    
+    Returns:
+        tuple: (tx_hash, Exception) - tx_hash on success, Exception on failure
+    """
+    last_error = None
+    
+    for attempt in range(max_retries + 1):
+        try:
+            # Get fresh nonce for each attempt
+            current_nonce = web3_instance.eth.get_transaction_count(web3_acct.address)
+            
+            # Build transaction with fresh nonce
+            tx_params = base_tx_params.copy()
+            tx_params['nonce'] = current_nonce
+            
+            logger.debug(f"Transaction attempt {attempt + 1}/{max_retries + 1} with nonce {current_nonce}")
+            
+            tx = contract_function.build_transaction(tx_params)
+            signed_tx = web3_instance.eth.account.sign_transaction(tx, private_key=web3_acct.key)
+            tx_hash = web3_instance.eth.send_raw_transaction(signed_tx.rawTransaction)
+            
+            logger.info(f"Transaction submitted successfully on attempt {attempt + 1} with nonce {current_nonce}")
+            return tx_hash, None
+            
+        except Exception as e:
+            last_error = e
+            logger.warning(f"Transaction attempt {attempt + 1} failed: {e}")
+            
+            # Check if this is a nonce error that we should retry
+            if not is_nonce_error(e):
+                logger.error(f"Non-retryable error encountered: {e}")
+                return None, Exception(f"Transaction failed with non-retryable error: {e}")
+            
+            # If this was our last attempt, don't sleep
+            if attempt >= max_retries:
+                break
+                
+            # Calculate exponential backoff delay
+            delay = min(base_delay * (2 ** attempt), max_delay)
+            
+            # Add jitter to prevent thundering herd problem
+            if jitter:
+                delay += random.uniform(0, delay * 0.1)  # Add up to 10% jitter
+            
+            logger.info(f"Nonce conflict detected, retrying in {delay:.2f} seconds...")
+            time.sleep(delay)
+    
+    # All retries exhausted
+    logger.error(f"Transaction failed after {max_retries + 1} attempts. Last error: {last_error}")
+    return None, Exception(f"Transaction failed after {max_retries + 1} attempts: {last_error}")
 
 class EVMClient:
     def __init__(self):
@@ -157,46 +245,61 @@ class EVMClient:
         logger.info(f"Deployer address: {deployer_address}")
         return deployer_address
 
-    def update_validator_set(self, update_tx_params):
+    def update_validator_set(self, update_tx_params) -> tuple[str, Exception]:
+        """
+        Update the validator set
+        Returns (tx_hash: str, error: Exception)
+        """
         logger.info("Updating validator set...")
         logger.info(f"Update tx params: {update_tx_params}")
         try:
-            tx = self.data_bridge_contract.functions.updateValidatorSet(
+            contract_function = self.data_bridge_contract.functions.updateValidatorSet(
                 update_tx_params["new_validator_set_hash"],
                 update_tx_params["new_power_threshold"],
                 update_tx_params["new_validator_timestamp"],
                 update_tx_params["current_validator_set"],
                 update_tx_params["sigs"]
-            ).build_transaction({
+            )
+            
+            base_tx_params = {
                 'from': self.web3_acct.address,
-                'nonce': self.web3_instance.eth.get_transaction_count(self.web3_acct.address),
-                'gas': 1000000,  
+                'gas': 700000,  
                 'gasPrice': int(self.web3_instance.eth.gas_price * 1.25),
-            })
-            logger.info(f"Tx: {tx}")
-            signed_tx = self.web3_instance.eth.account.sign_transaction(tx, private_key=self.web3_acct.key)
-            tx_hash = self.web3_instance.eth.send_raw_transaction(signed_tx.rawTransaction)
-            logger.info(f"Tx hash: {tx_hash.hex()}")
+            }
+            
+            # Use retry logic for transaction submission
+            tx_hash, tx_error = send_transaction_with_retry(
+                self.web3_instance, 
+                self.web3_acct, 
+                contract_function, 
+                base_tx_params,
+                max_retries=5,
+                base_delay=1.0,
+                max_delay=30.0
+            )
+            
+            if tx_error:
+                return None, tx_error
             
             # Wait for receipt and check success
             success, _ = self.wait_for_transaction_receipt_and_log(tx_hash, "Validator set update")
             if not success:
-                return None
+                return None, Exception("Transaction failed")
                 
-            return tx_hash
+            return tx_hash, None
         except Exception as e:
             logger.error(f"Error updating validator set: {e}")
-            return None
+            return None, Exception(f"Error updating validator set: {e}")
 
-    def update_oracle_data(self, oracle_update_params, contract_type="SimpleLayerUser", user_data=None) -> tuple[str, str]:
+    def update_oracle_data(self, oracle_update_params, contract_type="SimpleLayerUser", user_data=None) -> tuple[str, Exception]:
         """
         Update oracle data in the appropriate contract
-        Returns (tx_hash: str, error: str)
+        Returns (tx_hash: str, error: Exception)
         """
         try:
             contract_address = os.getenv("LAYER_USER_CONTRACT_ADDRESS")
             if not contract_address:
-                return None, "LAYER_USER_CONTRACT_ADDRESS not set"
+                return None, Exception("LAYER_USER_CONTRACT_ADDRESS not set")
             
             # Get the appropriate contract based on type
             if contract_type == "SimpleLayerUser":
@@ -216,12 +319,12 @@ class EVMClient:
                     self.setup_tellor_data_bank_contract()
                 contract = self.layer_user_contract
             else:
-                return None, f"Unsupported contract type: {contract_type}"
+                return None, Exception(f"Unsupported contract type: {contract_type}")
             
             # Get the appropriate adapter
             adapter = get_contract_adapter(contract_type)
             if not adapter:
-                return None, f"No adapter found for contract type: {contract_type}"
+                return None, Exception(f"No adapter found for contract type: {contract_type}")
             
             # Prepare parameters and build transaction
             if user_data is None:
@@ -229,27 +332,37 @@ class EVMClient:
             
             params = adapter.prepare_update_params(oracle_update_params, user_data)
             
-            # Build and send transaction
+            # Build and send transaction with retry logic
             contract_function = adapter.update_oracle_data(contract, params)
-            tx = contract_function.build_transaction({
+            base_tx_params = {
                 'from': self.web3_acct.address,
-                'nonce': self.web3_instance.eth.get_transaction_count(self.web3_acct.address),
-                'gas': 1000000,
+                'gas': 800000,
                 'gasPrice': int(self.web3_instance.eth.gas_price * 1.25)
-            })
+            }
             
-            signed_tx = self.web3_instance.eth.account.sign_transaction(tx, private_key=self.web3_acct.key)
-            tx_hash = self.web3_instance.eth.send_raw_transaction(signed_tx.rawTransaction)
+            # Use retry logic for transaction submission
+            tx_hash, tx_error = send_transaction_with_retry(
+                self.web3_instance, 
+                self.web3_acct, 
+                contract_function, 
+                base_tx_params,
+                max_retries=5,  # configurable
+                base_delay=1.0,  # start with 1 second
+                max_delay=30.0   # max 30 seconds between retries
+            )
+            
+            if tx_error:
+                return None, tx_error
             
             # Wait for receipt and check success
             success, _ = self.wait_for_transaction_receipt_and_log(tx_hash, f"Oracle data update ({contract_type})")
             if not success:
-                return None, "Transaction failed"
+                return None, Exception("Transaction failed")
                 
             return tx_hash, None
         except Exception as e:
             logger.error(f"Error updating oracle data: {e}")
-            return None, str(e)
+            return None, Exception(f"Error updating oracle data: {e}")
 
     def reset_data_bridge(self, reset_tx_params):
         logger.info("Resetting Data bridge...")
@@ -343,7 +456,7 @@ class EVMClient:
             raise Exception("Token bridge contract not initialized")
         return self.token_bridge_contract.functions.withdrawClaimed(withdraw_id).call()
 
-    def get_last_relayed_data(self, contract_type="TellorDataBank"):
+    def get_last_relayed_data(self, contract_type="TellorDataBank") -> tuple[dict, Exception]:
         """
         Get the last relayed data from the user contract
         Returns decoded data in a standardized format
@@ -360,8 +473,8 @@ class EVMClient:
         
         adapter = get_contract_adapter(contract_type)
         if not adapter or not adapter_can_read_data(adapter):
-            raise Exception(f"Contract type {contract_type} does not support reading data")
+            return None, Exception(f"Contract type {contract_type} does not support reading data")
         
         query_id = os.getenv("QUERY_ID")
         raw_data = adapter.get_last_relayed_data(self.layer_user_contract, query_id).call()
-        return adapter.decode_last_relayed_data(raw_data)
+        return adapter.decode_last_relayed_data(raw_data), None

@@ -1,7 +1,8 @@
 import time
 import os
 import requests
-from src.layer_client import query_validator_set_update, query_latest_oracle_data, get_data_bridge_init_params, get_layer_latest_validator_timestamp, get_next_validator_set_timestamp, get_layer_chain_status, get_data_bridge_reset_params, query_latest_oracle_data, get_attestation_data_before, get_current_power_threshold, get_oracle_proof, get_layer_connection_status
+from eth_abi import decode
+from src.layer_client import query_validator_set_update, query_latest_oracle_data, get_data_bridge_init_params, get_layer_latest_validator_timestamp, get_next_validator_set_timestamp, get_layer_chain_status, get_data_bridge_reset_params, query_latest_oracle_data, get_attestation_data_before, get_current_power_threshold, get_oracle_proof, get_layer_connection_status, get_layer_chain_id, get_data_before
 from src.evm_client import EVMClient  # Only import the class
 from src.transformer import transform_data_bridge_init_params, transform_valset_update_params, transform_oracle_update_params, transform_data_bridge_reset_params
 from src.email_client import send_email_alert
@@ -38,7 +39,7 @@ def get_oracle_data(query_id):
     
     return oracle_update_params, None
 
-def get_oracle_data_optimized(query_id, optimistic_delay=900, max_attestation_age=600, max_data_age=14400, min_stake_percentage=33):
+def get_oracle_data_optimized(query_id, optimistic_delay=900, max_attestation_age=600, max_data_age=14400, min_stake_percentage=33, last_relayed_timestamp=0) -> tuple[dict, Exception]:
     """
     Gets oracle data based on SamplePriceFeedUser preferences
     
@@ -48,60 +49,100 @@ def get_oracle_data_optimized(query_id, optimistic_delay=900, max_attestation_ag
         max_attestation_age: The maximum age of an attestation
         max_data_age: The maximum age of a report
         min_stake_percentage: The minimum stake percentage to use for optimistic data
+        last_relayed_timestamp: The aggregate timestamp of the last relayed data (milliseconds) (optional)
+
+    Returns:
+        A tuple containing the oracle data and an exception if an error occurs
 
     Algorithm:
-    - get latest report
+    - get latest report attestation data
     - if consensus, use this
-        - check data age. if greater than max_data_age, (request new report?) just log warning and skip
-        - check attestation age. if greater than max_attestation_age, request new attestations for this and report
+        - check if report is older than last_relayed_timestamp. If so, return error (need a tip)
+        - check data age. if greater than max_data_age, return error (need a tip)
+        - check attestation age. if greater than max_attestation_age, request new attestations for this and relay
     - if not consensus, check if lastConsensusTimestamp is less than optimistic_delay age. If so, use this.
-        - if attestation age is greater than max_attestation_age, request new attestations for this and report
+        - if attestation age is greater than max_attestation_age, request new attestations for this and relay
     - otherwise, getDataBefore(now - optimistic_delay)
-    - if this report has more stake than min_stake_percentage, request new attestations for this and report
+        - if this report has more stake than min_stake_percentage, request new attestations for this and relay
     """
-    attestation_data, e = get_attestation_data_before(query_id, int(time.time()) * 1000)
+    logger.info(f"Getting oracle data for query ID {query_id} with optimistic delay {optimistic_delay} max attestation age {max_attestation_age} max data age {max_data_age} min stake percentage {min_stake_percentage} last relayed timestamp {last_relayed_timestamp}")
+    ADD_A_TIP = "Add a tip."
+    # get latest attestation data
+    attest_data, e = get_attestation_data_before(query_id, int(time.time()) * 1000)
     if e:
-        return None, e
-    if attestation_data["last_consensus_timestamp"] == attestation_data["timestamp"]:
+        return None, Exception(f"No data found. {ADD_A_TIP}")
+    
+    # make sure the aggregate data is going forward in time
+    if last_relayed_timestamp > int(attest_data["timestamp"]):
+        logger.debug(f"Latest report is >= last relayed timestamp. New data needed. Report timestamp: {attest_data['timestamp']} Last relayed timestamp: {last_relayed_timestamp}")
+        return None, Exception(f"Latest report is >= last relayed timestamp. {ADD_A_TIP}")
+
+    # determine which report to use
+    opt_ts_ms = int(time.time() - optimistic_delay) * 1000 # optimistic timestamp
+    if attest_data["last_consensus_timestamp"] == attest_data["timestamp"]:
         # is consensus
-        logger.info("Latest report is consensus")
-    elif int(time.time()) * 1000 - int(attestation_data["last_consensus_timestamp"]) < optimistic_delay * 1000:
-        # last consensus timestamp is less than optimistic delay, use this
-        logger.info("Latest report is not consensus, but last consensus timestamp is less than optimistic delay")
-        attestation_data, e = get_attestation_data_before(query_id, int(attestation_data["last_consensus_timestamp"]) + 1)
+        logger.debug("Latest report is consensus")
+    elif int(attest_data["last_consensus_timestamp"]) > opt_ts_ms:
+        # last consensus timestamp is more recent than optimistic timestamp, use last consensus timestamp report
+        # this report should never be too old, since MAX_DATA_AGE > OPTIMISTIC_DELAY
+        # it should never be older than the last relayed timestamp. but it could be equal to it.
+        logger.debug("Latest report is not consensus, but last consensus timestamp is less than optimistic delay")
+        if int(attest_data["last_consensus_timestamp"]) <= last_relayed_timestamp:
+            # if any optimistic data exists between last_relayed_timestamp and now, we should just exit and relay it once it's
+            # older than the optimistic timestamp, since we don't want to keep tipping for optimistic data that we can't immediately relay
+            # TODO: check all reports between last_relayed_timestamp and now
+            current_power_threshold, e = get_current_power_threshold()
+            if e:
+                return None, e
+            if int(attest_data["aggregate_power"]) > int(current_power_threshold) * 3/2 * min_stake_percentage / 100:
+                # latest report has enough stake to be relayed after the optimistic timestamp
+                return None, Exception("Relay after latest report passes optimistic timestamp")
+            
+        attest_data, e = get_attestation_data_before(query_id, int(attest_data["last_consensus_timestamp"]) + 1)
         if e:
             return None, e
     else:
         # no consensus, get data before now - optimistic_delay
-        logger.info("Latest report is not consensus, and last consensus timestamp is older than optimistic delay")
-        attestation_data, e = get_attestation_data_before(query_id, int(time.time()) * 1000 - optimistic_delay)
+        logger.debug("Latest report is not consensus, and last consensus timestamp is older than optimistic delay")
+        attest_data, e = get_attestation_data_before(query_id, opt_ts_ms)
         if e:
-            return None, e
+            logger.error(f"Error getting attestation data before {opt_ts_ms}: {e}")
+            return None, Exception(f"Error getting attestation data before {opt_ts_ms}: {e} {ADD_A_TIP}")
         current_power_threshold, e = get_current_power_threshold()
         if e:
             return None, e
-        if int(attestation_data["aggregate_power"]) < current_power_threshold * 3/2 * min_stake_percentage / 100:
+        if int(attest_data["aggregate_power"]) < int(current_power_threshold) * 3/2 * int(min_stake_percentage) / 100:
             # report has too little stake
             logger.warning("Report has too little stake")
             # TODO: implement tip, request new report?
-            return None, "Report has too little stake. Add a tip."
+
+            return None, Exception("Report has too little stake. Add a tip.")
     
-    # check report and attestation data age
-    if int(time.time()) * 1000 - int(attestation_data["timestamp"]) > max_data_age * 1000:
+    # make sure the aggregate data is going forward in time
+    if int(attest_data["timestamp"]) <= last_relayed_timestamp:
+        logger.debug(f"Aggregate data is going backward in time. Report timestamp: {attest_data['timestamp']} Last relayed timestamp: {last_relayed_timestamp}")
+        return None, Exception(f"Aggregate data is going backward in time. {ADD_A_TIP}")
+    
+    # check report age
+    if int(time.time()) * 1000 - int(attest_data["timestamp"]) > max_data_age * 1000:
         # report is too old, no good data
-        return None, f"Report is too old. Add a tip. Report timestamp: {attestation_data['timestamp']} Current timestamp: {int(time.time()) * 1000}"
-    if int(time.time()) * 1000 - int(attestation_data["attestation_timestamp"]) > max_attestation_age * 1000:
+        return None, Exception(f"Report is too old. Add a tip. Report timestamp: {attest_data['timestamp']} Current timestamp: {int(time.time()) * 1000}")
+    
+    # check attestation age
+    if int(time.time()) * 1000 - int(attest_data["attestation_timestamp"]) > max_attestation_age * 1000:
         # attestation is too old, request new attestations
         logger.warning("Attestation is too old, requesting new attestations")
         layer_status, e = get_layer_connection_status()
         if e:
             return None, e
         chain_id = layer_status.get("result").get("node_info").get("network")
-        e = request_attestations(query_id, attestation_data["timestamp"], os.getenv("LAYER_ADDRESS"), os.getenv("LAYER_RPC_ENDPOINT"), chain_id)
+        e = request_attestations(query_id, attest_data["timestamp"], os.getenv("LAYER_ADDRESS"), os.getenv("LAYER_RPC_ENDPOINT"), chain_id)
         if e:
             return None, e
+        sleep(3)
+
     # get the report and attestation data
-    oracle_proof, e = get_oracle_proof(query_id, attestation_data["timestamp"])
+    oracle_proof, e = get_oracle_proof_from_layer(query_id, attest_data["timestamp"])
     if e:
         return None, e
     
@@ -143,15 +184,10 @@ def update_user_oracle_data(query_id=None, contract_type="SimpleLayerUser", user
         return None, None
     
     # Update oracle data using the appropriate contract
-    result = evm.update_oracle_data(oracle_data, contract_type, user_data)
-    if isinstance(result, tuple) and len(result) == 2:
-        tx_hash, e = result
-        if e:
-            logger.error(f"Error updating oracle data: {e}")
-            return None, e
-    else:
-        logger.error(f"Unexpected result from update_oracle_data: {result}")
-        return None, "Failed to update oracle data"
+    tx_hash, e = evm.update_oracle_data(oracle_data, contract_type, user_data)
+    if e:
+        logger.error(f"Error updating oracle data: {e}")
+        return None, e
     
     return tx_hash, None
 
@@ -223,82 +259,6 @@ def start_relayer():
                 logger.debug(f"Using regular sleep ({sleep_time}s)")
                 sleep(sleep_time)
 
-def heartbeat_or_threshold_should_relay(evm_client, sleep_time, price_threshold):
-    """
-    Check if the heartbeat or threshold should relay.
-    """
-    # init heartbeat
-    global next_heartbeat_time
-    if next_heartbeat_time == 0:
-        next_heartbeat_time = get_next_heartbeat_time(sleep_time)
-        return False
-
-    # get last relayed data
-    last_relayed_data = evm_client.get_last_relayed_data("TellorDataBank")
-    logger.debug(f"Last relayed data: {last_relayed_data}")
-
-    # check if heartbeat should relay
-    if int(time.time()) >= next_heartbeat_time:
-        # we passed the next heartbeat timestamp - reset heartbeat
-        next_heartbeat_time = get_next_heartbeat_time(sleep_time)
-        logger.debug(f"Passed heartbeat timestamp - next heartbeat timestamp: {next_heartbeat_time}")
-        if last_relayed_data["timestamp"] < next_heartbeat_time * 1000:  # convert to milliseconds
-            # and no data has been relayed - so return true
-            return True
-        # otherwise, new data has been relayed, but we continue to check for threshold change
-    
-    # check for threshold change
-    current_price = get_current_price_from_api()
-    last_price = last_relayed_data["value"][0]
-    price_change_percentage = abs(current_price - last_price) / last_price
-    logger.debug(f"Current price: {current_price}, last price: {last_price}")
-    logger.debug(f"Price change percentage: {price_change_percentage * 100}%")
-    if price_change_percentage > price_threshold:
-        return True
-    return False
-
-def get_current_price_from_api():
-    """
-    Get the current price from the API or Layer chain
-    """
-    api_url = os.getenv("PRICE_API_URL")
-    
-    if api_url:
-        try:
-            response = requests.get(api_url, timeout=10)
-            if response.status_code == 200:
-                data = response.json()
-                logger.debug(f"API response: {data}")
-                # Handle different API response formats
-                if "usd" in data:
-                    logger.debug(f"Price from API: {data['usd']}")
-                    return float(data["usd"])
-                elif isinstance(data, list) and len(data) > 0 and "usd" in data[0]:
-                    logger.debug(f"Price from API: {data[0]['usd']}")
-                    return float(data[0]["usd"])
-                # Handle CoinGecko format: {'bitcoin': {'usd': 116918}}
-                elif isinstance(data, dict):
-                    for coin_name, coin_data in data.items():
-                        if isinstance(coin_data, dict) and "usd" in coin_data:
-                            logger.debug(f"Price from API ({coin_name}): {coin_data['usd']}")
-                            return float(coin_data["usd"])
-                
-                logger.warning(f"Unexpected API response format: {data}")
-                return None
-        except Exception as e:
-            logger.warning(f"Failed to get price from API: {e}")
-    
-    # Fallback to Layer chain data
-    logger.info("Falling back to Layer chain for current price")
-    query_id = os.getenv("QUERY_ID")
-    oracle_data, error = query_latest_oracle_data(query_id)
-    if error:
-        logger.error(f"Failed to get price from Layer: {error}")
-        return None
-    
-    # Decode price from oracle data
-    value_bytes = oracle_data["attestation_data"]["report"]["value"]
-    return int.from_bytes(value_bytes, "big")
 
 
 def data_bridge_init(evm) -> Exception:
@@ -330,7 +290,7 @@ def data_bridge_reset(evm) -> Exception:
     evm.reset_data_bridge(reset_tx_params)  # Use evm instance method
     return None
 
-def update_to_latest_layer_validator_set(evm, data_bridge_validator_timestamp, layer_validator_timestamp) -> Exception:
+def update_to_latest_layer_validator_set(evm: EVMClient, data_bridge_validator_timestamp: str, layer_validator_timestamp: str) -> Exception:
     while int(data_bridge_validator_timestamp) < int(layer_validator_timestamp):
         next_validator_timestamp, e = get_next_validator_set_timestamp(data_bridge_validator_timestamp)
         if e:
@@ -341,7 +301,9 @@ def update_to_latest_layer_validator_set(evm, data_bridge_validator_timestamp, l
         logger.debug(f"Valset update params: {valset_update_params}")
         valset_update_tx_params = transform_valset_update_params(valset_update_params)
         logger.debug(f"Valset update tx params: {valset_update_tx_params}")
-        _ = evm.update_validator_set(valset_update_tx_params)  # Use evm instance method
+        _, e = evm.update_validator_set(valset_update_tx_params)  # Use evm instance method
+        if e:
+            return e
         logger.info("Submitted valset update tx")
         sleep(VALSET_SLEEP_TIME)
         layer_validator_timestamp, e = get_layer_latest_validator_timestamp()
@@ -393,17 +355,17 @@ def handle_validator_set_update(evm) -> Exception:
             return e
         
 
-def sleep(seconds):
+def sleep(seconds: int) -> None:
     logger.debug(f"Sleeping for {seconds} seconds")
     time.sleep(seconds)
     return None
 
-def fixed_interval_sleep(interval_seconds):
+def fixed_interval_sleep(interval_seconds: int, offset: int = 5) -> None:
     """
     Sleep for a fixed interval, starting from 1/1/2025 00:00:00 GMT
     """
     current_time = time.time()
-    next_heartbeat_time = get_next_heartbeat_time(interval_seconds)
+    next_heartbeat_time = get_next_heartbeat_time(interval_seconds, offset)
     sleep_duration = next_heartbeat_time - current_time
     
     # Safety check to prevent negative sleep times
@@ -415,16 +377,24 @@ def fixed_interval_sleep(interval_seconds):
     time.sleep(sleep_duration)
     return None
 
-def get_next_heartbeat_time(interval_seconds):
+def get_next_heartbeat_time(interval_seconds: int, offset: int = 5) -> int:
     """
     Get the next heartbeat time for a fixed interval
+    The basis time is 1/1/2025 00:00:00 GMT, or 1735689600
+
+    Args:
+        interval_seconds: The interval in seconds
+        offset: The offset in seconds
+
+    Returns:
+        The next heartbeat time
     """
     current_time = time.time()
     # Basis time is 1/1/2025 00:00:00 GMT, or 1735689600
     # Plus 5 seconds since sepolia's next block after 00:00:00 is consistently at 00:00:12
     # This gives time to be try to be included in the next eth block
     # TODO: make this offset configurable
-    basis_time = 1735689600 + 5
+    basis_time = 1735689600 + offset
     diff = current_time - basis_time
     next_heartbeat_time = int(diff / interval_seconds) * interval_seconds + interval_seconds + basis_time
     return next_heartbeat_time
@@ -521,18 +491,23 @@ def start_threshold_relayer():
     evm = EVMClient()
     evm.init_web3()
     evm.setup_data_bridge_contract()
+    evm.setup_tellor_data_bank_contract()
     
     # Do initial relay to establish baseline
-    logger.info("Performing initial relay...")
-    user_data = {"user_trigger_timestamp": int(time.time())}
-    _, error = update_user_oracle_data_optimized(query_id, contract_type, user_data, 
-                                               optimistic_delay, max_attestation_age, 
-                                               max_data_age, min_stake_percentage)
-    if error:
-        logger.error(f"Initial relay failed: {error}")
+    # logger.info("Performing initial relay...")
+    # user_data = {"user_trigger_timestamp": int(time.time())}
+    chain_id, e = get_layer_chain_id()
+    if e:
+        logger.error(f"Error getting layer chain ID: {e}")
+        return
+    # _, error = update_user_oracle_data_optimized(query_id, contract_type, user_data, 
+    #                                            optimistic_delay, max_attestation_age, 
+    #                                            max_data_age, min_stake_percentage, chain_id)
+    # if error:
+    #     logger.error(f"Initial relay failed: {error}")
     
     global next_heartbeat_time
-    next_heartbeat_time = get_next_heartbeat_time(sleep_time)
+    next_heartbeat_time = get_next_heartbeat_time(sleep_time, int(os.getenv("OFFSET", "5")))
     logger.info(f"Next heartbeat time: {next_heartbeat_time}")
     
     while True:
@@ -555,8 +530,7 @@ def start_threshold_relayer():
             if heartbeat_or_threshold_should_relay(evm, sleep_time, price_threshold):
                 logger.info("Relay condition met, updating oracle data...")
                 user_data = {"user_trigger_timestamp": int(time.time())}
-                chain_id = chain_status.get("result").get("node_info").get("network")
-                _, error = update_user_oracle_data_optimized(query_id, contract_type, user_data,
+                _, error = update_user_oracle_data_optimized(evm, query_id, contract_type, user_data,
                                                            optimistic_delay, max_attestation_age,
                                                            max_data_age, min_stake_percentage, chain_id)
                 if error:
@@ -568,7 +542,7 @@ def start_threshold_relayer():
         # Sleep for check interval
         sleep(check_interval)
 
-def update_user_oracle_data_optimized(query_id=None, contract_type="TellorDataBank", user_data=None, 
+def update_user_oracle_data_optimized(evm: EVMClient, query_id=None, contract_type="TellorDataBank", user_data=None, 
                                      optimistic_delay=900, max_attestation_age=600, max_data_age=14400, 
                                      min_stake_percentage=33, chain_id="layertest-4"):
     """
@@ -579,24 +553,36 @@ def update_user_oracle_data_optimized(query_id=None, contract_type="TellorDataBa
     
     just_print = os.getenv("JUST_PRINT", "false").lower() == "true"
     logger.info(f"Updating oracle data for query ID {query_id} using {contract_type} contract...")
-    
-    # Initialize EVM client
-    evm = EVMClient()
-    evm.init_web3()
+
+    last_relayed_data, error = evm.get_last_relayed_data(contract_type)
+    if error:
+        logger.error(f"Error getting last relayed data: {error}")
+        return None, error
+    if last_relayed_data is None:
+        logger.debug("No last relayed data found, setting last relayed timestamp to 0")
+        last_relayed_timestamp = 0
+    else:
+        logger.debug(f"Last relayed data: {last_relayed_data}")
+        last_relayed_timestamp = int(float(last_relayed_data["timestamp"]) * 1000)
+
     
     # Get optimized oracle data
     tip_count = 0
-    max_tips = 3
+    max_tips = 5
     bool_get_data = True
+    tip_amount = 10000
+    tip_sleep_time = 10
     while bool_get_data:
         oracle_data, error = get_oracle_data_optimized(query_id, optimistic_delay, max_attestation_age, 
-                                                    max_data_age, min_stake_percentage)
+                                                    max_data_age, min_stake_percentage, last_relayed_timestamp)
         if error:
             # If the error string contains "Add a tip.", add a tip and try again
-            if "Add a tip." in error and tip_count < max_tips:
+            if "Add a tip." in str(error) and tip_count < max_tips:
                 tip_count += 1
-                tip(os.getenv("QUERY_DATA"), os.getenv("LAYER_ADDRESS"), os.getenv("LAYER_RPC_ENDPOINT"), chain_id)
-                sleep(3)
+                tip(os.getenv("QUERY_DATA"), os.getenv("LAYER_ADDRESS"), os.getenv("LAYER_RPC_ENDPOINT"), chain_id, tip_amount)
+                tip_amount = int(tip_amount * 1.2)
+                sleep(tip_sleep_time)
+                tip_sleep_time = int(tip_sleep_time * 1.5)
             else:
                 logger.error(f"Error getting oracle data: {error}")
                 return None, error
@@ -609,14 +595,139 @@ def update_user_oracle_data_optimized(query_id=None, contract_type="TellorDataBa
         return None, None
     
     # Update oracle data using the TellorDataBank contract
-    result = evm.update_oracle_data(oracle_data, contract_type, user_data)
-    if isinstance(result, tuple) and len(result) == 2:
-        tx_hash, e = result
-        if e:
-            logger.error(f"Error updating oracle data: {e}")
-            return None, e
-    else:
-        logger.error(f"Unexpected result from update_oracle_data: {result}")
-        return None, "Failed to update oracle data"
+    tx_hash, e = evm.update_oracle_data(oracle_data, contract_type, user_data)
+    if e:
+        logger.error(f"Error updating oracle data: {e}")
+        return None, e
     
     return tx_hash, None
+
+def heartbeat_or_threshold_should_relay(evm_client: EVMClient, sleep_time: int, price_threshold: float) -> bool:
+    """
+    Check if the heartbeat or threshold should relay.
+    """
+    # init heartbeat
+    global next_heartbeat_time
+    if next_heartbeat_time == 0:
+        next_heartbeat_time = get_next_heartbeat_time(sleep_time, int(os.getenv("OFFSET", "5")))
+        return False
+
+    # get last relayed data
+    last_relayed_data, error = evm_client.get_last_relayed_data("TellorDataBank")
+    if error:
+        logger.error(f"Error getting last relayed data: {error}")
+        return False
+    logger.debug(f"Last relayed data: {last_relayed_data}")
+
+    if last_relayed_data is None:
+        logger.debug("No last relayed data found, returning true")
+        return True
+
+    # check if heartbeat should relay
+    if int(time.time()) >= next_heartbeat_time:
+        # we passed the next heartbeat timestamp - reset heartbeat
+        next_heartbeat_time = get_next_heartbeat_time(sleep_time, int(os.getenv("OFFSET", "5")))
+        logger.debug(f"Passed heartbeat timestamp - next heartbeat timestamp: {next_heartbeat_time}")
+        if int(last_relayed_data["timestamp"]) < next_heartbeat_time:
+            # and no data has been relayed - so return true
+            return True
+        # otherwise, new data has been relayed, but we continue to check for threshold change
+    
+    # check for threshold change
+    current_price, error = get_current_price_from_api()
+    if error:
+        logger.error(f"Error getting current price from API: {error}")
+        return False
+    last_price = last_relayed_data["value"][0]
+    price_change_percentage = abs(current_price - last_price) / last_price
+    logger.debug(f"Current price: {current_price}, last price: {last_price}")
+    logger.debug(f"Price change percentage: {price_change_percentage * 100}%")
+    if price_change_percentage > price_threshold:
+        return True
+    return False
+
+def get_current_price_from_api() -> tuple[float, Exception]:
+    """
+    Get the current price from the API or Layer chain
+    """
+    api_url = os.getenv("PRICE_API_URL")
+    
+    if api_url:
+        try:
+            response = requests.get(api_url, timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                logger.debug(f"API response: {data}")
+                # Handle different API response formats
+                if "usd" in data:
+                    logger.debug(f"Price from API: {data['usd']}")
+                    return float(data["usd"]), None
+                elif isinstance(data, list) and len(data) > 0 and "usd" in data[0]:
+                    logger.debug(f"Price from API: {data[0]['usd']}")
+                    return float(data[0]["usd"]), None
+                # Handle CoinGecko format: {'bitcoin': {'usd': 116918}}
+                elif isinstance(data, dict):
+                    for coin_name, coin_data in data.items():
+                        if isinstance(coin_data, dict) and "usd" in coin_data:
+                            logger.debug(f"Price from API ({coin_name}): {coin_data['usd']}")
+                            return float(coin_data["usd"]), None
+                
+                logger.warning(f"Unexpected API response format: {data}")
+                return None, Exception(f"Unexpected API response format: {data}")
+        except Exception as e:
+            logger.warning(f"Failed to get price from API: {e}")
+            return None, Exception(f"Failed to get price from API: {e}")
+    
+    # Fallback to Layer chain data
+    logger.info("Falling back to Layer chain for current price")
+    try:
+        query_id = os.getenv("QUERY_ID")
+        oracle_data, error = query_latest_oracle_data(query_id)
+        if error:
+            logger.error(f"Failed to get price from Layer: {error}")
+            return None, error
+        
+        # Decode price from oracle data
+        value_hex = oracle_data["attestation_data"]["aggregate_value"]
+        value_bytes = bytes.fromhex(value_hex)
+        value_decoded = decode(["uint256"], value_bytes)
+        return float(value_decoded[0])/10**18, None
+    except Exception as e:
+        logger.error(f"Failed to get price from Layer: {e}")
+        return None, Exception(f"Failed to get price from Layer: {e}")
+
+def get_oracle_proof_from_layer(query_id: str, timestamp: int) -> tuple[dict, Exception]:
+    """
+    Get oracle proof from layer by queryId and timestamp
+    If checkpoint mismatch, request new attestations and retry
+    """
+    oracle_data, error = get_oracle_proof(query_id, timestamp)
+    if error is None:
+        return oracle_data, None
+    if str(error) != "layer_client: Checkpoint mismatch":
+        return None, error
+    
+    # request new attestations
+    chain_id, e = get_layer_chain_id()
+    if e:
+        return None, e
+    
+    e = request_attestations(query_id, timestamp, os.getenv("LAYER_ADDRESS"), os.getenv("LAYER_RPC_ENDPOINT"), chain_id)
+    if e:
+        return None, e
+    sleep(5)
+
+    return get_oracle_proof(query_id, timestamp)
+
+def get_latest_oracle_proof_from_layer(query_id: str) -> tuple[dict, Exception]:
+    """
+    Get latest oracle proof from layer by queryId
+    If checkpoint mismatch, request new attestations and retry
+    """
+    current_time = int(time.time()) * 1000
+    report, e = get_data_before(query_id, current_time)
+    if e:
+        return None, e
+    if report is None or "timestamp" not in report:
+        return None, Exception("layer_client: No data found")
+    return get_oracle_proof_from_layer(query_id, report["timestamp"])

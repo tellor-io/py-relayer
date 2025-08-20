@@ -10,6 +10,7 @@ from src.report import generate_power_report
 from src.logger_utils import setup_logging
 from src.logger_utils import get_logger
 from src.valset_relayer import start_valset_relayer
+from src.query_parser import QueryParser
 
 logger = get_logger(__name__)
 
@@ -28,6 +29,32 @@ def add_logging_options(func):
 def configure_logging(verbose, no_color):
     """Configure logging based on options"""
     setup_logging(verbose=verbose, no_color=no_color)
+
+def parse_query_string_if_provided(query_string, query_id, query_data):
+    """
+    Parse query string if provided, otherwise use existing query_id and query_data
+    
+    Args:
+        query_string: Optional query string like "SpotPrice(eth,usd)"
+        query_id: Existing query_id (used if query_string not provided)
+        query_data: Existing query_data (used if query_string not provided)
+        
+    Returns:
+        Tuple of (final_query_id, final_query_data)
+    """
+    if query_string:
+        logger.info(f"Parsing query string: {query_string}")
+        parser = QueryParser()
+        query_info = parser.get_query_info(query_string)
+        logger.info(f"Generated queryId: {query_info['queryId']}")
+        logger.info(f"Query type: {query_info['queryType']}")
+        if query_info['hasDefinition']:
+            logger.info("Using predefined query type definition")
+        else:
+            logger.info("Using inline type definitions")
+        return query_info['queryId'], query_info['queryData']
+    else:
+        return query_id, query_data
 
 def to_checksum_address(address: str) -> str:
     """Convert address to EIP-55 checksum format"""
@@ -62,7 +89,8 @@ def cli(ctx, verbose, no_color):
 
 @cli.command()
 @add_logging_options
-@click.option('--query-id', envvar='QUERY_ID', required=True, help='Query ID to relay')
+@click.option('--query-id', envvar='QUERY_ID', help='Query ID to relay (alternative to --query-string)')
+@click.option('--query-string', envvar='QUERY_STRING', help='Query string like "SpotPrice(eth,usd)" (alternative to --query-id)')
 @click.option('--sleep-time', envvar='SLEEP_TIME', type=int, default=600, help='Sleep time between relays in seconds')
 @click.option('--fixed-interval', is_flag=True, help='Use fixed interval timing instead of fixed sleep duration')
 @click.option('--eth-private-key', envvar='ETH_PRIVATE_KEY', required=True, help='Ethereum private key')
@@ -75,10 +103,19 @@ def cli(ctx, verbose, no_color):
               default='SimpleLayerUser', help='Type of contract to use for relaying')
 @click.option('--layer-tx-creator-address', envvar='LAYER_ADDRESS', required=True, help='Local keyring address used for creating transactions on layer')
 @click.option('--just-print', is_flag=True, help='Just print the oracle data parameters without submitting transaction')
-def relay(query_id, sleep_time, fixed_interval, eth_private_key, web3_provider, layer_swagger, layer_rpc, 
+def relay(query_id, query_string, sleep_time, fixed_interval, eth_private_key, web3_provider, layer_swagger, layer_rpc, 
           data_bridge_address, layer_user_address, contract_type, just_print, layer_tx_creator_address, verbose, no_color):
     """Start the relayer process"""
     configure_logging(verbose=verbose, no_color=no_color)
+    
+    # validate that either query_id or query_string is provided
+    if not query_id and not query_string:
+        logger.error("Either --query-id or --query-string must be provided")
+        exit(1)
+    
+    # parse query string if provided
+    final_query_id, final_query_data = parse_query_string_if_provided(query_string, query_id, None)
+    
     # Set environment variables
     os.environ['ETH_PRIVATE_KEY'] = to_checksum_address(eth_private_key)
     os.environ['WEB3_PROVIDER_URL'] = web3_provider
@@ -86,7 +123,9 @@ def relay(query_id, sleep_time, fixed_interval, eth_private_key, web3_provider, 
     os.environ['LAYER_RPC_ENDPOINT'] = layer_rpc
     os.environ['DATA_BRIDGE_CONTRACT_ADDRESS'] = to_checksum_address(data_bridge_address)
     os.environ['LAYER_USER_CONTRACT_ADDRESS'] = to_checksum_address(layer_user_address)
-    os.environ['QUERY_ID'] = query_id
+    os.environ['QUERY_ID'] = final_query_id
+    if final_query_data:
+        os.environ['QUERY_DATA'] = final_query_data
     os.environ['SLEEP_TIME'] = str(sleep_time)
     
     os.environ['CONTRACT_TYPE'] = contract_type
@@ -160,15 +199,24 @@ def reset(eth_private_key, data_bridge_address, web3_provider, layer_swagger, ju
 
 @cli.command()
 @add_logging_options
-@click.option('--query-id', envvar='QUERY_ID', required=True, help='Query ID to update')
+@click.option('--query-id', envvar='QUERY_ID', help='Query ID to update (alternative to --query-string)')
+@click.option('--query-string', envvar='QUERY_STRING', help='Query string like "SpotPrice(eth,usd)" (alternative to --query-id)')
 @click.option('--contract-type', type=click.Choice(['SimpleLayerUser', 'TestPriceFeedUser']), 
               default='SimpleLayerUser', help='Type of contract to use')
-def update(query_id, contract_type, verbose, no_color):
+def update(query_id, query_string, contract_type, verbose, no_color):
     """Update oracle data for a specific query ID"""
     configure_logging(verbose=verbose, no_color=no_color)
 
+    # validate that either query_id or query_string is provided
+    if not query_id and not query_string:
+        logger.error("Either --query-id or --query-string must be provided")
+        exit(1)
+    
+    # parse query string if provided
+    final_query_id, _ = parse_query_string_if_provided(query_string, query_id, None)
+
     try:
-        tx_hash, error = update_user_oracle_data(query_id, contract_type)
+        tx_hash, error = update_user_oracle_data(final_query_id, contract_type)
         if error:
             logger.error(f"Error updating oracle data: {error}")
             exit(1)
@@ -183,15 +231,17 @@ def update(query_id, contract_type, verbose, no_color):
 @click.option('--eth-private-key', envvar='ETH_PRIVATE_KEY', required=True, help='Ethereum private key')
 @click.option('--web3-provider', envvar='WEB3_PROVIDER_URL', required=True, help='Web3 provider URL')
 @click.option('--layer-swagger', envvar='LAYER_SWAGGER_ENDPOINT', required=True, help='Layer swagger endpoint')
+@click.option('--layer-rpc', envvar='LAYER_RPC_ENDPOINT', required=True, help='Layer RPC endpoint')
 @click.option('--data-bridge-address', envvar='DATA_BRIDGE_CONTRACT_ADDRESS', required=True, help='Tellor data bridge contract address')
 @click.option('--token-bridge-address', envvar='TOKEN_BRIDGE_CONTRACT_ADDRESS', required=True, help='Token Bridge contract address')
 @click.option('--layer-tx-creator-address', envvar='LAYER_ADDRESS', required=True, help='Local keyring address used for creating transactions on layer')
-def relay_bridge(withdraw_id, eth_private_key, web3_provider, layer_swagger, data_bridge_address, token_bridge_address, layer_tx_creator_address, verbose, no_color):
+def relay_bridge(withdraw_id, eth_private_key, web3_provider, layer_swagger, layer_rpc, data_bridge_address, token_bridge_address, layer_tx_creator_address, verbose, no_color):
     """Relay a specific withdraw from Layer to EVM chain"""
     configure_logging(verbose=verbose, no_color=no_color)
     os.environ['ETH_PRIVATE_KEY'] = to_checksum_address(eth_private_key)
     os.environ['WEB3_PROVIDER_URL'] = web3_provider
     os.environ['LAYER_SWAGGER_ENDPOINT'] = layer_swagger
+    os.environ['LAYER_RPC_ENDPOINT'] = layer_rpc
     os.environ['DATA_BRIDGE_CONTRACT_ADDRESS'] = to_checksum_address(data_bridge_address)
     os.environ['TOKEN_BRIDGE_CONTRACT_ADDRESS'] = to_checksum_address(token_bridge_address)
     os.environ['LAYER_ADDRESS'] = layer_tx_creator_address
@@ -203,8 +253,9 @@ def relay_bridge(withdraw_id, eth_private_key, web3_provider, layer_swagger, dat
 
 @cli.command()
 @add_logging_options
-@click.option('--query-id', envvar='QUERY_ID', required=True, help='Query ID to tip')
-@click.option('--query-data', envvar='QUERY_DATA', required=True, help='Query data to tip')
+@click.option('--query-id', envvar='QUERY_ID', help='Query ID to tip (alternative to --query-string)')
+@click.option('--query-data', envvar='QUERY_DATA', help='Query data to tip (alternative to --query-string)')
+@click.option('--query-string', envvar='QUERY_STRING', help='Query string like "SpotPrice(eth,usd)" (alternative to --query-id/--query-data)')
 @click.option('--layer-address', envvar='LAYER_ADDRESS', required=True, help='Layer address')
 @click.option('--sleep-time', envvar='SLEEP_TIME', type=int, default=3600, help='Sleep time between iterations in seconds')
 @click.option('--layer-rpc', envvar='LAYER_RPC_ENDPOINT', required=True, help='Layer RPC endpoint')
@@ -215,13 +266,25 @@ def relay_bridge(withdraw_id, eth_private_key, web3_provider, layer_swagger, dat
 @click.option('--layer-swagger', envvar='LAYER_SWAGGER_ENDPOINT', required=True, help='Layer swagger endpoint')
 @click.option('--contract-type', envvar='CONTRACT_TYPE', type=click.Choice(['SimpleLayerUser', 'TestPriceFeedUser']), default='SimpleLayerUser', 
               help='Type of contract to use for relaying')
-def tip(query_id, query_data, layer_address, layer_rpc, eth_private_key, web3_provider, layer_swagger, 
+def tip(query_id, query_data, query_string, layer_address, layer_rpc, eth_private_key, web3_provider, layer_swagger, 
         data_bridge_address, layer_user_address, contract_type, sleep_time, verbose, no_color):
     """Start the tipper process"""
     configure_logging(verbose=verbose, no_color=no_color)
+    
+    # validate that either query_id/query_data or query_string is provided
+    if query_string:
+        if query_id or query_data:
+            logger.warning("Both --query-string and --query-id/--query-data provided. Using --query-string.")
+        final_query_id, final_query_data = parse_query_string_if_provided(query_string, None, None)
+    elif query_id and query_data:
+        final_query_id, final_query_data = query_id, query_data
+    else:
+        logger.error("Either --query-string or both --query-id and --query-data must be provided")
+        exit(1)
+    
     # Set environment variables
-    os.environ['QUERY_ID'] = query_id
-    os.environ['QUERY_DATA'] = query_data
+    os.environ['QUERY_ID'] = final_query_id
+    os.environ['QUERY_DATA'] = final_query_data
     os.environ['LAYER_ADDRESS'] = layer_address
     os.environ['LAYER_RPC_ENDPOINT'] = layer_rpc
     os.environ['ETH_PRIVATE_KEY'] = to_checksum_address(eth_private_key)
@@ -243,28 +306,39 @@ def tip(query_id, query_data, layer_address, layer_rpc, eth_private_key, web3_pr
 
 @cli.command()
 @add_logging_options
-@click.option('--query-id', envvar='QUERY_ID', required=True, help='Query ID to scrape')
+@click.option('--query-id', envvar='QUERY_ID', help='Query ID to scrape (alternative to --query-string)')
+@click.option('--query-string', envvar='QUERY_STRING', help='Query string like "SpotPrice(eth,usd)" (alternative to --query-id)')
 @click.option('--scrape-count', type=int, default=1000, help='Number of data points to scrape')
 @click.option('--output-file', envvar='LAYER_DATA_CSV', default="data/layer_data.csv", help='Output CSV file path')
 @click.option('--scrape-micro', is_flag=True, help='Scrape micro reports after aggregate data')
-def scrape(query_id, scrape_count, output_file, scrape_micro, verbose, no_color):
+def scrape(query_id, query_string, scrape_count, output_file, scrape_micro, verbose, no_color):
     """Scrape historical data from Layer chain"""
     configure_logging(verbose=verbose, no_color=no_color)
+    
+    # validate that either query_id or query_string is provided
+    if not query_id and not query_string:
+        logger.error("Either --query-id or --query-string must be provided")
+        exit(1)
+    
+    # parse query string if provided
+    final_query_id, final_query_data = parse_query_string_if_provided(query_string, query_id, None)
+    
     # Set environment variables
-    os.environ['QUERY_ID'] = query_id
+    os.environ['QUERY_ID'] = final_query_id
     os.environ['SCRAPE_COUNT'] = str(scrape_count)
     os.environ['LAYER_DATA_CSV'] = output_file
 
     logger.info(f"Scraping layer data to {output_file}")
 
-    scrape_layer(query_id, output_file, scrape_count, scrape_micro)
+    scrape_layer(final_query_id, output_file, scrape_count, scrape_micro)
 
 @cli.command()
 @add_logging_options
 @click.option('--input-file', envvar='LAYER_DATA_CSV', default="data/layer_data.csv", help='Input CSV file path')
 @click.option('--terminal-plot', is_flag=True, help='Show plot in terminal')
 @click.option('--micro', is_flag=True, help='Analyze micro reports')
-def report(input_file, terminal_plot, micro, verbose, no_color):
+@click.option('--assume-all', is_flag=True, default=False, help='Assume all reporters existed from the beginning')
+def report(input_file, terminal_plot, micro, assume_all, verbose, no_color):
     """Generate reports from scraped data"""
     configure_logging(verbose=verbose, no_color=no_color)
     if not os.path.exists(input_file):
@@ -272,7 +346,7 @@ def report(input_file, terminal_plot, micro, verbose, no_color):
         return
     
     logger.info(f"Generating reports from {input_file}")
-    stats = generate_power_report(input_file, show_terminal_plot=terminal_plot, micro_report=micro)
+    _ = generate_power_report(input_file, show_terminal_plot=terminal_plot, micro_report=micro, assume_all_existed_from_start=assume_all)
     logger.info("\nReport generated in reports/power_vs_height.png")
 
 @cli.command()
@@ -307,8 +381,9 @@ def relay_valset(sleep_time, fixed_interval, eth_private_key, web3_provider, lay
 
 @cli.command()
 @add_logging_options
-@click.option('--query-id', envvar='QUERY_ID', required=True, help='Query ID to relay')
-@click.option('--query-data', envvar='QUERY_DATA', required=True, help='Query data to relay')
+@click.option('--query-id', envvar='QUERY_ID', help='Query ID to relay (alternative to --query-string)')
+@click.option('--query-data', envvar='QUERY_DATA', help='Query data to relay (alternative to --query-string)')
+@click.option('--query-string', envvar='QUERY_STRING', help='Query string like "SpotPrice(eth,usd)" (alternative to --query-id/--query-data)')
 @click.option('--sleep-time', envvar='SLEEP_TIME', type=int, default=600, help='Sleep time between heartbeats in seconds')
 @click.option('--price-threshold', envvar='PRICE_THRESHOLD', type=float, required=True, help='Price change threshold as decimal (e.g., 0.01 for 1%)')
 @click.option('--check-interval', envvar='CHECK_INTERVAL', type=int, default=60, help='Interval between price checks in seconds')
@@ -325,12 +400,24 @@ def relay_valset(sleep_time, fixed_interval, eth_private_key, web3_provider, lay
 @click.option('--max-data-age', envvar='MAX_DATA_AGE', type=int, default=14400, help='Max data age in seconds')
 @click.option('--min-stake-percentage', envvar='MIN_STAKE_PERCENTAGE', type=int, default=33, help='Min stake percentage for optimistic data')
 @click.option('--just-print', is_flag=True, help='Just print the oracle data parameters without submitting transaction')
-def relay_threshold(query_id, query_data, sleep_time, price_threshold, check_interval, price_api_url, eth_private_key, 
+@click.option('--offset', envvar='OFFSET', type=int, default=5, help='Offset in seconds for the next heartbeat time')
+def relay_threshold(query_id, query_data, query_string, sleep_time, price_threshold, check_interval, price_api_url, eth_private_key, 
                    web3_provider, layer_swagger, layer_rpc, data_bridge_address, layer_user_address, 
                    layer_tx_creator_address, optimistic_delay, max_attestation_age, max_data_age, 
-                   min_stake_percentage, just_print, verbose, no_color):
+                   min_stake_percentage, just_print, offset, verbose, no_color):
     """Start the threshold relayer process (heartbeat + price threshold)"""
     configure_logging(verbose=verbose, no_color=no_color)
+    
+    # validate that either query_id/query_data or query_string is provided
+    if query_string:
+        if query_id or query_data:
+            logger.warning("Both --query-string and --query-id/--query-data provided. Using --query-string.")
+        final_query_id, final_query_data = parse_query_string_if_provided(query_string, None, None)
+    elif query_id and query_data:
+        final_query_id, final_query_data = query_id, query_data
+    else:
+        logger.error("Either --query-string or both --query-id and --query-data must be provided")
+        exit(1)
     
     # Set environment variables
     os.environ['ETH_PRIVATE_KEY'] = to_checksum_address(eth_private_key)
@@ -339,8 +426,8 @@ def relay_threshold(query_id, query_data, sleep_time, price_threshold, check_int
     os.environ['LAYER_RPC_ENDPOINT'] = layer_rpc
     os.environ['DATA_BRIDGE_CONTRACT_ADDRESS'] = to_checksum_address(data_bridge_address)
     os.environ['LAYER_USER_CONTRACT_ADDRESS'] = to_checksum_address(layer_user_address)
-    os.environ['QUERY_ID'] = query_id
-    os.environ['QUERY_DATA'] = query_data
+    os.environ['QUERY_ID'] = final_query_id
+    os.environ['QUERY_DATA'] = final_query_data
     os.environ['SLEEP_TIME'] = str(sleep_time)
     os.environ['PRICE_THRESHOLD'] = str(price_threshold)
     os.environ['CHECK_INTERVAL'] = str(check_interval)
@@ -351,7 +438,7 @@ def relay_threshold(query_id, query_data, sleep_time, price_threshold, check_int
     os.environ['MAX_ATTESTATION_AGE'] = str(max_attestation_age)
     os.environ['MAX_DATA_AGE'] = str(max_data_age)
     os.environ['MIN_STAKE_PERCENTAGE'] = str(min_stake_percentage)
-    
+    os.environ['OFFSET'] = str(offset)
     if price_api_url:
         os.environ['PRICE_API_URL'] = price_api_url
     
@@ -362,6 +449,75 @@ def relay_threshold(query_id, query_data, sleep_time, price_threshold, check_int
         exit(0)
     except Exception as e:
         logger.error(f"Error starting threshold relayer: {e}")
+        exit(1)
+
+@cli.command()
+@add_logging_options
+@click.option('--query-string', '-q', required=True, help='Query string to parse and validate')
+def parse_query(query_string, verbose, no_color):
+    """
+    Parse and validate a query string, showing the generated queryData and queryId
+
+    \b
+    Examples:
+        - relayer parse-query --query-string "SpotPrice(eth,usd)"
+        - relayer parse-query -q "CustomType(uint256 123, string 'hello', bool true)"
+    """
+    configure_logging(verbose=verbose, no_color=no_color)
+    
+    try:
+        parser = QueryParser()
+        query_info = parser.get_query_info(query_string)
+        
+        print(f"\n✅ Successfully parsed query string: {query_string}")
+        print(f"📋 Query Type: {query_info['queryType']}")
+        print(f"📝 Has Definition: {'Yes' if query_info['hasDefinition'] else 'No (using inline types)'}")
+        
+        # display parsed arguments
+        arguments = query_info.get('arguments', [])
+        if arguments:
+            print(f"\n📝 Parsed Arguments:")
+            for i, arg in enumerate(arguments, 1):
+                name = arg['name']
+                arg_type = arg['type']
+                raw_value = arg['rawValue']
+                
+                # format the value nicely for display
+                display_value = raw_value
+                if arg_type == 'string' and ((raw_value.startswith("'") and raw_value.endswith("'")) or 
+                                           (raw_value.startswith('"') and raw_value.endswith('"'))):
+                    display_value = raw_value[1:-1]  # remove quotes for display
+                
+                print(f"   arg{i:<2} type: {arg_type:<10} value: {display_value}")
+        else:
+            print(f"\n📝 No arguments")
+        
+        print(f"\n🔑 Query ID: {query_info['queryId']}")
+        print(f"📦 Query Data: {query_info['queryData']}")
+        
+        # show some additional useful info
+        # remove 0x prefix for hex parsing, handling double prefix if present
+        query_id_hex = query_info['queryId']
+        if query_id_hex.startswith('0x0x'):
+            query_id_hex = query_id_hex[3:]  # remove "0x0" to leave "x..."
+        elif query_id_hex.startswith('0x'):
+            query_id_hex = query_id_hex[2:]  # remove "0x"
+            
+        query_data_hex = query_info['queryData']
+        if query_data_hex.startswith('0x'):
+            query_data_hex = query_data_hex[2:]
+            
+        query_id_bytes = bytes.fromhex(query_id_hex)
+        query_data_bytes = bytes.fromhex(query_data_hex)
+        print(f"\n📊 Additional Info:")
+        print(f"   Query ID length: {len(query_id_bytes)} bytes")
+        print(f"   Query Data length: {len(query_data_bytes)} bytes")
+        
+    except Exception as e:
+        logger.error(f"❌ Error parsing query string: {e}")
+        print(f"\n💡 Examples of valid query strings:")
+        print(f"   SpotPrice(eth,usd)")
+        print(f"   CustomType(uint256 123, string 'hello world', bool true)")
         exit(1)
 
 if __name__ == '__main__':

@@ -249,15 +249,19 @@ class TellorDataBankAdaptor(ContractAdapter, ReadableContractAdapter):
         # data[3] = attestationTimestamp (uint256, in milliseconds)
         # data[4] = relayTimestamp (uint256, in seconds)
         
-        value_decoded = decode(["uint256"], data[0])  # This is already bytes
-        # divide by 10^18 to get the price
-        value_int = value_decoded[0] / 10**18
-        timestamp_s = int(data[2]) / 1000  # aggregateTimestamp in milliseconds
+        try:
+            value_decoded = decode(["uint256"], data[0])  # This is already bytes
+            # divide by 10^18 to get the price
+            value_int = value_decoded[0] / 10**18
+            timestamp_s = int(data[2]) / 1000  # aggregateTimestamp in milliseconds
 
-        return {
-            "value": [value_int],  # Wrap in list to match expected format in price comparison
-            "timestamp": timestamp_s  # Keep in milliseconds for consistency
-        }
+            return {
+                    "value": [value_int],  # Wrap in list to match expected format in price comparison
+                    "timestamp": timestamp_s  # Keep in milliseconds for consistency
+                }
+        except Exception as e:
+            logger.error(f"Error decoding last relayed data: {e}")
+            return None
 
 # Factory to get the appropriate adapter
 def get_contract_adapter(contract_type):

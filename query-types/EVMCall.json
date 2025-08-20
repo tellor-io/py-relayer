@@ -1,0 +1,17 @@
+{
+    "type": "EVMCall",
+    "abi": [
+        {
+            "type": "uint256",
+            "name": "chainId"
+        },
+        {
+            "type": "bytes",
+            "name": "calldata"
+        }
+    ],
+    "response": {
+        "type": "bytes",
+        "packed": false
+    }
+} 
