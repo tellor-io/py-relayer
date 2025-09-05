@@ -15,6 +15,8 @@ VALSET_SLEEP_TIME = 1
 
 # Global variables for threshold relayer
 next_heartbeat_time = 0
+pending_heartbeat_time = 0
+last_tip_time = 0
 
 def get_oracle_data(query_id):
     """
@@ -65,7 +67,7 @@ def get_oracle_data_optimized(query_id, optimistic_delay=900, max_attestation_ag
     - otherwise, getDataBefore(now - optimistic_delay)
         - if this report has more stake than min_stake_percentage, request new attestations for this and relay
     """
-    logger.info(f"Getting oracle data for query ID {query_id} with optimistic delay {optimistic_delay} max attestation age {max_attestation_age} max data age {max_data_age} min stake percentage {min_stake_percentage} last relayed timestamp {last_relayed_timestamp}")
+    logger.debug(f"Getting oracle data for query ID {query_id} with optimistic delay {optimistic_delay} max attestation age {max_attestation_age} max data age {max_data_age} min stake percentage {min_stake_percentage} last relayed timestamp {last_relayed_timestamp}")
     ADD_A_TIP = "Add a tip."
     # get latest attestation data
     attest_data, e = get_attestation_data_before(query_id, int(time.time()) * 1000)
@@ -532,7 +534,7 @@ def start_threshold_relayer():
                 user_data = {"user_trigger_timestamp": int(time.time())}
                 _, error = update_user_oracle_data_optimized(evm, query_id, contract_type, user_data,
                                                            optimistic_delay, max_attestation_age,
-                                                           max_data_age, min_stake_percentage, chain_id)
+                                                           max_data_age, min_stake_percentage, chain_id, sleep_time)
                 if error:
                     logger.error(f"Error updating oracle data: {error}")
             
@@ -544,7 +546,7 @@ def start_threshold_relayer():
 
 def update_user_oracle_data_optimized(evm: EVMClient, query_id=None, contract_type="TellorDataBank", user_data=None, 
                                      optimistic_delay=900, max_attestation_age=600, max_data_age=14400, 
-                                     min_stake_percentage=33, chain_id="layertest-4"):
+                                     min_stake_percentage=33, chain_id="layertest-4", sleep_time: int = 14400):
     """
     Update oracle data using optimized oracle data retrieval for TellorDataBank
     """
@@ -573,6 +575,23 @@ def update_user_oracle_data_optimized(evm: EVMClient, query_id=None, contract_ty
     tip_amount = 10000
     tip_sleep_time = 10
     while bool_get_data:
+        # get latest data from layer. if older than heartbeat, submit a tip
+        last_attestation_data, e = get_attestation_data_before(query_id, int(time.time()) * 1000)
+        if e:
+            logger.debug(f"Error getting attestation data. Tipping. Error: {e}")
+            tip(os.getenv("QUERY_DATA"), os.getenv("LAYER_ADDRESS"), os.getenv("LAYER_RPC_ENDPOINT"), chain_id, tip_amount)
+            sleep(tip_sleep_time)
+        elif last_attestation_data is None or "timestamp" not in last_attestation_data:
+            logger.debug(f"No attestation data found. Tipping.")
+            tip(os.getenv("QUERY_DATA"), os.getenv("LAYER_ADDRESS"), os.getenv("LAYER_RPC_ENDPOINT"), chain_id, tip_amount)
+            sleep(tip_sleep_time)
+        elif (int(last_attestation_data["timestamp"])/1000) < (int(time.time()) - sleep_time):
+            logger.debug(f"Attestation data is older than heartbeat. Tipping.")
+            tip(os.getenv("QUERY_DATA"), os.getenv("LAYER_ADDRESS"), os.getenv("LAYER_RPC_ENDPOINT"), chain_id, tip_amount)
+            sleep(tip_sleep_time)
+        else:
+            logger.debug(f"Latest data is within heartbeat. Getting oracle data.")
+        
         oracle_data, error = get_oracle_data_optimized(query_id, optimistic_delay, max_attestation_age, 
                                                     max_data_age, min_stake_percentage, last_relayed_timestamp)
         if error:
@@ -608,8 +627,11 @@ def heartbeat_or_threshold_should_relay(evm_client: EVMClient, sleep_time: int, 
     """
     # init heartbeat
     global next_heartbeat_time
+    global pending_heartbeat_time
+
     if next_heartbeat_time == 0:
         next_heartbeat_time = get_next_heartbeat_time(sleep_time, int(os.getenv("OFFSET", "5")))
+        pending_heartbeat_time = next_heartbeat_time
         return False
 
     # get last relayed data
@@ -622,6 +644,10 @@ def heartbeat_or_threshold_should_relay(evm_client: EVMClient, sleep_time: int, 
     if last_relayed_data is None:
         logger.debug("No last relayed data found, returning true")
         return True
+    
+    if pending_heartbeat_time < next_heartbeat_time:
+        if int(last_relayed_data["relay_timestamp"]) < pending_heartbeat_time:
+            return True
 
     # check if heartbeat should relay
     if int(time.time()) >= next_heartbeat_time:
@@ -631,7 +657,10 @@ def heartbeat_or_threshold_should_relay(evm_client: EVMClient, sleep_time: int, 
         if int(last_relayed_data["timestamp"]) < next_heartbeat_time:
             # and no data has been relayed - so return true
             return True
-        # otherwise, new data has been relayed, but we continue to check for threshold change
+        else:
+            # we passed the next heartbeat timestamp, and new data has been relayed, so we can reset the pending heartbeat time
+            # but we still need to check for threshold change
+            pending_heartbeat_time = next_heartbeat_time
     
     # check for threshold change
     current_price, error = get_current_price_from_api()

@@ -111,6 +111,11 @@ def get_current_aggregate_report(query_id: str) -> tuple[dict, Exception]:
     request_string = f"/tellor-io/layer/oracle/get_current_aggregate_report/{query_id}"
     return _query_layer_rest_api(request_string, "get_current_aggregate_report")
 
+def get_current_tip(query_data: str) -> tuple[dict, Exception]:
+    query_data = strip_0x(query_data)
+    request_string = f"/tellor-io/layer/oracle/get_current_tip/{query_data}"
+    return _query_layer_rest_api(request_string, "get_current_tip")
+
 def get_snapshots_by_report(query_id: str, timestamp: int) -> tuple[dict, Exception]:
     query_id = strip_0x(query_id)
     request_string = f"/layer/bridge/get_snapshots_by_report/{query_id}/{timestamp}"
@@ -124,7 +129,9 @@ def get_attestation_data_by_snapshot(snapshot: str) -> tuple[dict, Exception]:
     request_string = f"/layer/bridge/get_attestation_data_by_snapshot/{snapshot}"
     return _query_layer_rest_api(request_string, "get_attestation_data_by_snapshot")
 
-
+def get_minimum_gas_prices() -> tuple[dict, Exception]:
+    request_string = f"/gaia/globalfee/v1beta1/minimum_gas_prices"
+    return _query_layer_rest_api(request_string, "get_minimum_gas_prices")
 
 # ************************************************************************************************
 #

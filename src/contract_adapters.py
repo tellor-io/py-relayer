@@ -253,11 +253,13 @@ class TellorDataBankAdaptor(ContractAdapter, ReadableContractAdapter):
             value_decoded = decode(["uint256"], data[0])  # This is already bytes
             # divide by 10^18 to get the price
             value_int = value_decoded[0] / 10**18
-            timestamp_s = int(data[2]) / 1000  # aggregateTimestamp in milliseconds
+            timestamp_s = int(data[2]) / 1000  # aggregateTimestamp in seconds
+            relay_timestamp_s = int(data[4])
 
             return {
                     "value": [value_int],  # Wrap in list to match expected format in price comparison
-                    "timestamp": timestamp_s  # Keep in milliseconds for consistency
+                    "timestamp": timestamp_s,
+                    "relay_timestamp": relay_timestamp_s 
                 }
         except Exception as e:
             logger.error(f"Error decoding last relayed data: {e}")

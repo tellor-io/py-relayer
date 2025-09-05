@@ -1,8 +1,9 @@
-from src.layer_client import strip_0x
+from src.layer_client import strip_0x, get_minimum_gas_prices
 from src.logger_utils import get_logger
 import subprocess
 
 logger = get_logger(__name__)
+__minimum_gas_prices = "0loya"
 
 def tip(query_data, layer_address, layer_rpc_endpoint, chain_id="layertest-4", amount_loya=10000) -> Exception:
     # ensure all parameters are strings for subprocess
@@ -12,6 +13,7 @@ def tip(query_data, layer_address, layer_rpc_endpoint, chain_id="layertest-4", a
     layer_rpc_endpoint_str = str(layer_rpc_endpoint)
     chain_id_str = str(chain_id)
     amount_loya_str = str(int(amount_loya)) + "loya"
+    gas_price = minimum_gas_prices()
 
     logger.debug(f"Tipping {amount_loya_str} for query {query_data_stripped}")
     logger.debug(f"Layer address: {layer_address_str}  Chain ID: {chain_id_str} Layer RPC Endpoint: {layer_rpc_endpoint_str}")
@@ -21,8 +23,10 @@ def tip(query_data, layer_address, layer_rpc_endpoint, chain_id="layertest-4", a
              query_data_stripped,
              amount_loya_str, 
              "--from", layer_address_str, 
-             "--chain-id", chain_id_str, 
-             "--fees", "5loya", 
+             "--chain-id", chain_id_str,
+             "--gas=auto",
+             "--gas-adjustment=1.5",
+             "--gas-prices", gas_price,
              "--keyring-backend", "test", 
              "--yes", 
              "--node=" + layer_rpc_endpoint_str],
@@ -48,6 +52,7 @@ def request_attestations(query_id, timestamp, layer_address, layer_rpc_endpoint,
         layer_address_str = str(layer_address)
         layer_rpc_endpoint_str = str(layer_rpc_endpoint)
         chain_id_str = str(chain_id)
+        gas_price = minimum_gas_prices()
         
         result = subprocess.run(
             ["layerd", "tx", "bridge", "request-attestations",
@@ -56,7 +61,9 @@ def request_attestations(query_id, timestamp, layer_address, layer_rpc_endpoint,
              timestamp_str,
              "--from", layer_address_str,
              "--chain-id", chain_id_str,
-             "--fees", "5loya",
+             "--gas=auto",
+             "--gas-adjustment=1.5",
+             "--gas-prices", gas_price,
              "--keyring-backend", "test",
              "--yes",
              "--node=" + layer_rpc_endpoint_str],
@@ -72,3 +79,13 @@ def request_attestations(query_id, timestamp, layer_address, layer_rpc_endpoint,
         logger.error(f"stdout: {e.stdout}")
         logger.error(f"stderr: {e.stderr}")
         raise
+
+def minimum_gas_prices():
+    global __minimum_gas_prices
+    if __minimum_gas_prices == "0loya":
+        __minimum_gas_prices, error = get_minimum_gas_prices()
+        if error:
+            logger.error(f"Error getting minimum gas prices: {error}")
+            return "0.000025000000000000loya"
+        __minimum_gas_prices = __minimum_gas_prices["minimum_gas_prices"][0]["amount"] + "loya"
+    return __minimum_gas_prices
