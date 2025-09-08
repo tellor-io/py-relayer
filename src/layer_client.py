@@ -157,7 +157,7 @@ def get_attestation_data_before(query_id: str, timestamp: int) -> tuple[dict, Ex
 
     Args:
         query_id: The query id
-        timestamp: The timestamp to get attestation data before
+        timestamp: The timestamp to get attestation data before in milliseconds
 
     Returns:
         A tuple containing the attestation data and an exception if an error occurs
