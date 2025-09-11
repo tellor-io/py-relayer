@@ -21,17 +21,19 @@ from src.logger_utils import get_logger
 
 logger = get_logger(__name__)
 
-class ImprovedThresholdRelayer:
+class ThresholdRelayer:
     """
-    Improved threshold relayer implementing the new tip and relay logic
+    Threshold relayer implementing tip and relay logic with primary/backup modes
     """
-    def __init__(self):
+    def __init__(self, mode: str = "primary"):
+        self.mode = mode.lower()  # "primary" or "backup"
         self.next_heartbeat_time = 0
         self.layer_chain_id = ""
         self.heartbeat_interval = 0  # seconds - heartbeat interval
         self.offset = 0  # seconds - offset
         self.check_interval = 0  # seconds - main loop interval
         self.latest_api_price = {"price": None, "timestamp": 0} # latest price from API and last retrieval timestamp
+        logger.info(f"Initialized {self.mode} threshold relayer")
 
     def start_relayer(self):
         """Start the improved threshold relayer process"""
@@ -141,6 +143,71 @@ class ImprovedThresholdRelayer:
                            query_id: str, price_threshold: float, evm: EVMClient) -> tuple[bool, str]:
         """Determine if we should tip based on heartbeat or threshold logic"""
         
+        if self.mode == "backup":
+            return self._determine_should_tip_backup(current_ts, latest_agg_report, query_id, price_threshold, evm)
+        else:
+            return self._determine_should_tip_primary(current_ts, latest_agg_report, query_id, price_threshold, evm)
+
+    def _determine_should_tip_backup(self, current_ts: int, latest_agg_report: dict, 
+                                   query_id: str, price_threshold: float, evm: EVMClient) -> tuple[bool, str]:
+        """Backup relayer tipping logic per pseudocode"""
+        
+        # check whether should tip:
+        # if current_tip > 600 or current_time - last_aggregate_report.timestamp < heartbeat_interval/5)
+        #     return false
+        current_tip_amount, error = self.get_current_tip_amount()
+        if error:
+            logger.error(f"Error getting current tip amount: {error}")
+            return False, f"error getting current tip amount: {error}"
+        latest_report_ts = int(latest_agg_report.get("timestamp", 0)) // 1000  # convert ms to seconds
+        # initial tip checks - skip if tip already exists (recent) or reporter just not reporting for tips (older)
+        # also skip if we already have a recent aggregate report
+        if current_tip_amount > 600 or (current_ts - latest_report_ts < self.heartbeat_interval // 5):
+            return False, f"skip - current tip amount: {current_tip_amount}, latest report age: {current_ts - latest_report_ts}s, threshold: {self.heartbeat_interval // 5}s"
+        
+        # heartbeat:
+        # If (current_time - last_aggregate_report.timestamp > heartbeat_interval) 
+        #     return true # should tip
+        if current_ts - latest_report_ts > self.heartbeat_interval:
+            return True, f"heartbeat tip - report age: {current_ts - latest_report_ts}s > {self.heartbeat_interval}s"
+        
+        # threshold
+        # do consensus check, same as primary relayer
+        last_consensus_ts = int(latest_agg_report.get("last_consensus_timestamp", 0)) // 1000  # convert ms to seconds
+        consensus_condition = (
+            latest_report_ts == last_consensus_ts or
+            current_ts - last_consensus_ts < int(self.heartbeat_interval * 1.5)
+        )
+        
+        if not consensus_condition:
+            return False, "no consensus for threshold tip"
+        
+        # if price_change > threshold: return True
+        if current_ts - latest_report_ts > 30:  # basic staleness check
+            try:
+                latest_relayed_data, error = evm.get_last_relayed_data("TellorDataBank")
+                if error or latest_relayed_data is None:
+                    logger.debug("No previous relay data found for threshold comparison")
+                    return False, "no previous relay data"
+                
+                real_price, error = self.get_price_from_api()
+                if error:
+                    logger.error(f"Failed to get current price: {error}")
+                    return False, "failed to get current price"
+                
+                price_change_pct = self.get_price_change_percentage(latest_relayed_data, real_price)
+                if price_change_pct >= price_threshold:
+                    return True, f"threshold tip - price change: {price_change_pct*100:.2f}% >= {price_threshold*100:.2f}%"
+                    
+            except Exception as e:
+                logger.error(f"Error in backup threshold tip logic: {e}")
+        
+        return False, "no tip needed"
+
+    def _determine_should_tip_primary(self, current_ts: int, latest_agg_report: dict, 
+                                    query_id: str, price_threshold: float, evm: EVMClient) -> tuple[bool, str]:
+        """Primary relayer tipping logic (original logic)"""
+        
         # heartbeat tip (preferred)
         next_heartbeat_time = self.next_heartbeat_time
         latest_report_ts = int(latest_agg_report.get("timestamp", 0)) // 1000  # convert ms to seconds
@@ -164,7 +231,7 @@ class ImprovedThresholdRelayer:
             if current_ts - latest_report_ts > 30:  # 30 seconds threshold
                 # first check whether latest aggregate report is older than heartbeat_interval seconds old
                 # this should only happen when relayer first starts, and latest report is older than heartbeat interval
-                if current_ts - latest_report_ts > int(self.heartbeat_interval * 1.5):
+                if current_ts - latest_report_ts > int(self.heartbeat_interval + self.check_interval):
                     return True, f"heartbeat tip catch-up - current: {current_ts}, latest_aggregate_report_ts: {latest_report_ts}, report age: {current_ts - latest_report_ts}s"
                 try:
                     latest_relayed_data, error = evm.get_last_relayed_data("TellorDataBank")
@@ -189,6 +256,60 @@ class ImprovedThresholdRelayer:
     def determine_should_relay(self, current_ts: int, latest_agg_report: dict, 
                              query_id: str, price_threshold: float, evm: EVMClient) -> tuple[bool, str]:
         """Determine if we should relay based on heartbeat or threshold logic"""
+        
+        if self.mode == "backup":
+            return self._determine_should_relay_backup(current_ts, latest_agg_report, query_id, price_threshold, evm)
+        else:
+            return self._determine_should_relay_primary(current_ts, latest_agg_report, query_id, price_threshold, evm)
+
+    def _determine_should_relay_backup(self, current_ts: int, latest_agg_report: dict, 
+                                     query_id: str, price_threshold: float, evm: EVMClient) -> tuple[bool, str]:
+        """Backup relayer relay logic per pseudocode"""
+        
+        try:
+            latest_relayed_data, error = evm.get_last_relayed_data("TellorDataBank")
+            if error:
+                logger.error(f"Error getting last relayed data: {error}")
+                return False, "backup error getting last relayed data"
+            
+            if latest_relayed_data is None:
+                return True, "backup no previous relay data - initial relay"
+            
+            relay_timestamp = latest_relayed_data.get("relay_timestamp", 0)
+            
+            # check whether should relay:
+            # if current_time - last_relayed_data.relayTimestamp > heartbeat_interval:
+            #     return True # should relay
+            if current_ts - relay_timestamp > self.heartbeat_interval:
+                return True, f"backup heartbeat relay - relay age: {current_ts - relay_timestamp}s > {self.heartbeat_interval}s"
+            
+            # else if consensus_check
+            last_consensus_ts = int(latest_agg_report.get("last_consensus_timestamp", 0)) // 1000  # convert ms to seconds
+            latest_report_ts = int(latest_agg_report.get("timestamp", 0)) // 1000  # convert ms to seconds
+            consensus_condition = (
+                latest_report_ts == last_consensus_ts or
+                current_ts - last_consensus_ts < int(self.heartbeat_interval * 1.5)
+            )
+            
+            if consensus_condition:
+                # if price_change_pct > threshold return True
+                real_price, error = self.get_price_from_api()
+                if error:
+                    logger.error(f"Failed to get current price for backup threshold relay: {error}")
+                    return False, "backup failed to get current price"
+                
+                price_change_pct = self.get_price_change_percentage(latest_relayed_data, real_price)
+                if price_change_pct >= price_threshold:
+                    return True, f"backup threshold relay - price change: {price_change_pct*100:.2f}% >= {price_threshold*100:.2f}%"
+        
+        except Exception as e:
+            logger.error(f"Error in backup relay determination logic: {e}")
+        
+        return False, "backup no relay needed"
+
+    def _determine_should_relay_primary(self, current_ts: int, latest_agg_report: dict, 
+                                      query_id: str, price_threshold: float, evm: EVMClient) -> tuple[bool, str]:
+        """Primary relayer relay logic (original logic)"""
         
         try:
             latest_relayed_data, error = evm.get_last_relayed_data("TellorDataBank")
@@ -228,7 +349,7 @@ class ImprovedThresholdRelayer:
         
         return False, "no relay needed"
 
-    def get_current_tip_amount(self) -> int:
+    def get_current_tip_amount(self) -> tuple[int, Exception]:
         """
         Get current tip amount for the query data from Layer chain
         Returns 0 if no tip or error
@@ -237,22 +358,22 @@ class ImprovedThresholdRelayer:
             query_data = os.getenv("QUERY_DATA")
             if not query_data:
                 logger.error("QUERY_DATA not set in environment")
-                return 0
+                return 0, Exception("QUERY_DATA not set in environment")
             
             tip_data, error = get_current_tip(query_data)
             if error:
                 logger.debug(f"No current tip found or error getting tip: {error}")
-                return 0
+                return 0, Exception("No current tip found or error getting tip")
             
             if tip_data and "amount" in tip_data:
                 tip_amount = int(tip_data["amount"])
                 logger.debug(f"Current tip amount for query: {tip_amount}")
-                return tip_amount
+                return tip_amount, None
             
             return 0
         except Exception as e:
             logger.error(f"Error getting current tip amount: {e}")
-            return 0
+            return 0, Exception(f"Error getting current tip amount: {e}")
 
     def get_price_change_percentage(self, latest_relayed_data: dict, real_price: float) -> float:
         """Calculate price change percentage"""
@@ -377,7 +498,12 @@ class ImprovedThresholdRelayer:
             self.latest_api_price = {"price": latest_price, "timestamp": current_time}
         return self.latest_api_price["price"], None
 
-def start_improved_threshold_relayer():
-    """Entry point for the improved threshold relayer"""
-    relayer = ImprovedThresholdRelayer()
+def start_primary_threshold_relayer():
+    """Entry point for the primary threshold relayer"""
+    relayer = ThresholdRelayer(mode="primary")
+    relayer.start_relayer()
+
+def start_backup_threshold_relayer():
+    """Entry point for the backup threshold relayer"""
+    relayer = ThresholdRelayer(mode="backup")
     relayer.start_relayer()
