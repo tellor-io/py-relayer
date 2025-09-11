@@ -133,6 +133,10 @@ def get_minimum_gas_prices() -> tuple[dict, Exception]:
     request_string = f"/gaia/globalfee/v1beta1/minimum_gas_prices"
     return _query_layer_rest_api(request_string, "get_minimum_gas_prices")
 
+def get_oracle_module_params() -> tuple[dict, Exception]:
+    request_string = f"/layer/oracle/params"
+    return _query_layer_rest_api(request_string, "get_oracle_module_params")
+
 # ************************************************************************************************
 #
 #                           Advanced Queries

@@ -1,7 +1,7 @@
 import click
 from dotenv import load_dotenv
 import os
-from src.relayer import start_relayer, update_user_oracle_data, data_bridge_init, data_bridge_reset, start_threshold_relayer
+from src.relayer import start_relayer, update_user_oracle_data, data_bridge_init, data_bridge_reset
 from src.threshold_relayer import start_primary_threshold_relayer, start_backup_threshold_relayer
 from src.bridge_client import relay_withdraw
 from src.evm_client import EVMClient

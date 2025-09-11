@@ -14,7 +14,8 @@ from src.layer_client import (
     get_attestation_data_before,
     get_validator_checkpoint_params,
     get_layer_latest_validator_timestamp,
-    get_current_tip
+    get_current_tip,
+    get_oracle_module_params
 )
 from src.layer_tx_client import tip
 from src.logger_utils import get_logger
@@ -423,7 +424,7 @@ class ThresholdRelayer:
         try:
             # submit tip
             tip(query_data, os.getenv("LAYER_ADDRESS"), 
-                os.getenv("LAYER_RPC_ENDPOINT"), self.layer_chain_id, 10000)
+                os.getenv("LAYER_RPC_ENDPOINT"), self.layer_chain_id)
             
             logger.info("Tip submitted, waiting for new data...")
             sleep(3)  # initial wait
