@@ -37,7 +37,7 @@ class ThresholdRelayer:
         logger.info(f"Initialized {self.mode} threshold relayer")
 
     def start_relayer(self):
-        """Start the improved threshold relayer process"""
+        """Start the threshold relayer process"""
         # load configuration
         query_id = os.getenv("QUERY_ID")
         query_data = os.getenv("QUERY_DATA")
@@ -221,7 +221,10 @@ class ThresholdRelayer:
             
         
         # threshold tip (only if no heartbeat tip)
-        current_tip_amount = self.get_current_tip_amount()
+        current_tip_amount, error = self.get_current_tip_amount()
+        if error:
+            logger.error(f"Error getting current tip amount: {error}")
+            return False, f"error getting current tip amount: {error}"
         last_consensus_ts = int(latest_agg_report.get("last_consensus_timestamp", 0)) // 1000  # convert ms to seconds
         # only consider threshold tipping if we're generally getting consensus data
         consensus_condition = (
@@ -371,7 +374,7 @@ class ThresholdRelayer:
                 logger.debug(f"Current tip amount for query: {tip_amount}")
                 return tip_amount, None
             
-            return 0
+            return 0, None
         except Exception as e:
             logger.error(f"Error getting current tip amount: {e}")
             return 0, Exception(f"Error getting current tip amount: {e}")

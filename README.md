@@ -37,9 +37,7 @@ pip install -e .
 cp .env.example .env
 ```
 
-The "email" section of the .env file is optional. If you want to receive emails when layer is down, input your gmail username and password. We recommend using an [app password](https://support.google.com/accounts/answer/185833?hl=en) for your gmail account.
-
-Other than the email section, all .env variables can alternatively be set through the CLI. We recommend setting your ethereum private key in the .env file for security reasons. For convenience, you should set any parameters which tend to remain constant across runs in the .env file. CLI arguments will override .env variables.
+All .env variables can alternatively be set through the CLI. We recommend setting your ethereum private key in the .env file for security reasons. For convenience, you should set any parameters which tend to remain constant across runs in the .env file. CLI arguments will override .env variables.
 
 ### Additional Requirements for Ubuntu
 
@@ -61,31 +59,38 @@ The relayer provides several commands through its CLI:
 relayer relay --layer-test-user-address 0x39C93320776D7D9F75798fEF42C72433b718726d --data-bridge-address 0xc7670AeD260Ce55830D0766Eb4E5A04bE56979d3 --contract-type TestPriceFeedUser --sleep-time 900
 ```
 
-### Update Oracle Data Once
-```bash
-relayer update --query-id 0x83a7f3d48786ac2667503a61e8c415438ed2922eb86a2906e4ee66d9a2ce4992
-```
-
 ### Relay Token Bridge Withdraw
 ```bash
 relayer relay-bridge --data-bridge-address 0xa73Efa04476B45E5bBAa68A59f7Ee2A21e14FDD4 --token-bridge-address 0x6ac02F3887B358591b8B2D22CfB1F36Fa5843867 --withdraw-id 8
 ```
 
 ### Initialize Data Bridge
+This calls the data bridge `init` function to set the initial validator set. The `init` function can only be called by the contract deployer, and only once.
 ```bash
 relayer init
 ```
 
 ### Reset Data Bridge
+This allows the bridge guardian to reset the validator set, if and only if the validator set is stale (21 days old).
 ```bash
 relayer reset
 ```
 
+### Threshold Relayer (Primary)
+This relays data to the TellorDataBank contract based on a heartbeat and price change threshold.
+```bash
+relayer relay-threshold --query-string "SpotPrice(eth,usd)" --price-threshold 0.01 --data-bridge-address DATA_BRIDGE_CONTRACT_ADDRESS --layer-user-address LAYER_USER_CONTRACT_ADDRESS --layer-tx-creator-address LAYER_ADDRESS
+```
 
-
+### Threshold Relayer (Backup)
+This acts as a backup for the threshold relayer so that if the primary relayer fails, the backup can take over. The backup relayer should use a slightly higher price threshold and heartbeat interval than the primary relayer.
+```bash
+relayer relay-threshold --backup --query-string "SpotPrice(eth,usd)" --price-threshold 0.01 --data-bridge-address DATA_BRIDGE_CONTRACT_ADDRESS --layer-user-address LAYER_USER_CONTRACT_ADDRESS --web3-provider WEB3_PROVIDER_URL --layer-swagger LAYER_SWAGGER_ENDPOINT --layer-rpc LAYER_RPC_ENDPOINT --layer-tx-creator-address LAYER_ADDRESS
+```
 
 To see all available options for each command:
 ```bash
 relayer --help
 relayer relay --help
+relayer relay-threshold --help
 ```

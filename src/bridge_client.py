@@ -13,7 +13,7 @@ logger = get_logger(__name__)
 
 withdraw_delay = 43200 # seconds
 max_attestation_age = 43200 # seconds
-withdraw_id_to_relay = int(os.getenv("WITHDRAW_ID"))
+withdraw_id_to_relay = int(os.getenv("WITHDRAW_ID", "0"))
 
 # things to check:
 # 	- withdrawal id __exists__
