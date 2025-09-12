@@ -7,10 +7,11 @@ from src.logger_utils import get_logger
 
 logger = get_logger(__name__)
 
-def strip_0x(value):
-    if value.startswith("0x"):
-        return value[2:]
-    return value
+# ************************************************************************************************
+#
+#                           Layer RPC Queries
+#
+# ************************************************************************************************
 
 def get_layer_connection_status() -> tuple[str, Exception]:
     swagger_endpoint = os.getenv("LAYER_SWAGGER_ENDPOINT")
@@ -57,134 +58,90 @@ def get_layer_chain_id() -> tuple[str, Exception]:
         return None, e
     return layer_status.get("result").get("node_info").get("network"), None
 
-# validator set functions
+
+
+# ************************************************************************************************
+#
+#                           Layer REST API Queries
+#
+# ************************************************************************************************
+
+# validator set queries
 def get_validator_timestamp_by_index(index: int) -> tuple[dict, Exception]:
-    swagger_endpoint = os.getenv("LAYER_SWAGGER_ENDPOINT")
-    request = f"{swagger_endpoint}/layer/bridge/get_validator_timestamp_by_index/{index}"
-    try:
-        response = requests.get(request)
-        return response.json(), None
-    except Exception as e:
-        logger.error(f"Error getting validator timestamp by index: {e}")
-        return None, e
+    request_string = f"/layer/bridge/get_validator_timestamp_by_index/{index}"
+    return _query_layer_rest_api(request_string, "get_validator_timestamp_by_index")
 
 def get_validator_checkpoint_params(timestamp: int) -> tuple[dict, Exception]:
-    swagger_endpoint = os.getenv("LAYER_SWAGGER_ENDPOINT")
-    request = f"{swagger_endpoint}/layer/bridge/get_validator_checkpoint_params/{timestamp}"
-    try:
-        response = requests.get(request)
-        return response.json(), None
-    except Exception as e:
-        logger.error(f"Error getting validator checkpoint params: {e}")
-        return None, e
+    request_string = f"/layer/bridge/get_validator_checkpoint_params/{timestamp}"
+    return _query_layer_rest_api(request_string, "get_validator_checkpoint_params")
 
 def get_valset_by_timestamp(timestamp: int) -> tuple[dict, Exception]:
-    swagger_endpoint = os.getenv("LAYER_SWAGGER_ENDPOINT")
-    request = f"{swagger_endpoint}/layer/bridge/get_valset_by_timestamp/{timestamp}"
-    try:
-        response = requests.get(request)
-        return response.json(), None
-    except Exception as e:
-        logger.error(f"Error getting validator set by timestamp: {e}")
-        return None, e
+    request_string = f"/layer/bridge/get_valset_by_timestamp/{timestamp}"
+    return _query_layer_rest_api(request_string, "get_valset_by_timestamp")
 
 def get_valset_sigs(timestamp: int) -> tuple[dict, Exception]:
-    swagger_endpoint = os.getenv("LAYER_SWAGGER_ENDPOINT")
-    request = f"{swagger_endpoint}/layer/bridge/get_valset_sigs/{timestamp}"
-    try:
-        response = requests.get(request)
-        return response.json(), None
-    except Exception as e:
-        logger.error(f"Error getting validator set sigs: {e}")
-        return None, e
+    request_string = f"/layer/bridge/get_valset_sigs/{timestamp}"
+    return _query_layer_rest_api(request_string, "get_valset_sigs")
 
 def get_current_validator_set_timestamp() -> tuple[str, Exception]:
-    swagger_endpoint = os.getenv("LAYER_SWAGGER_ENDPOINT")
-    request = f"{swagger_endpoint}/layer/bridge/get_current_validator_set_timestamp"
-    try:
-        response = requests.get(request)
-        return response.json(), None
-    except Exception as e:
-        logger.error(f"Error getting current validator set timestamp: {e}")
-        return None, e
+    request_string = f"/layer/bridge/get_current_validator_set_timestamp"
+    return _query_layer_rest_api(request_string, "get_current_validator_set_timestamp")
 
 def get_validator_set_index_by_timestamp(timestamp: int) -> tuple[dict, Exception]:
-    swagger_endpoint = os.getenv("LAYER_SWAGGER_ENDPOINT")
-    request = f"{swagger_endpoint}/layer/bridge/get_validator_set_index_by_timestamp/{timestamp}"
-    try:
-        response = requests.get(request)
-        return response.json(), None
-    except Exception as e:
-        logger.error(f"Error getting validator set index by timestamp: {e}")
-        return None, e
+    request_string = f"/layer/bridge/get_validator_set_index_by_timestamp/{timestamp}"
+    return _query_layer_rest_api(request_string, "get_validator_set_index_by_timestamp")
 
-# oracle data functions 
+def get_validator_checkpoint() -> tuple[dict, Exception]:
+    request_string = f"/layer/bridge/get_validator_checkpoint"
+    return _query_layer_rest_api(request_string, "get_validator_checkpoint")
+
+# oracle data queries
 def get_data_before(query_id: str, timestamp_before: int) -> tuple[dict, Exception]:
     query_id = strip_0x(query_id)
-    swagger_endpoint = os.getenv("LAYER_SWAGGER_ENDPOINT")
-    request = f"{swagger_endpoint}/tellor-io/layer/oracle/get_data_before/{query_id}/{timestamp_before}"
-    try:
-        response = requests.get(request)
-        return response.json(), None
-    except Exception as e:
-        logger.error(f"Error getting data before: {e}")
-        return None, e
+    request_string = f"/tellor-io/layer/oracle/get_data_before/{query_id}/{timestamp_before}"
+    return _query_layer_rest_api(request_string, "get_data_before")
     
 def get_reports_by_aggregate(query_id: str, timestamp: int) -> tuple[dict, Exception]:
     query_id = strip_0x(query_id)
-    swagger_endpoint = os.getenv("LAYER_SWAGGER_ENDPOINT")
-    request = f"{swagger_endpoint}/tellor-io/layer/oracle/get_reports_by_aggregate/{query_id}/{timestamp}?pagination.limit=10000"
-    logger.debug(f"Request: {request}")
-    try:
-        response = requests.get(request)
-        return response.json(), None
-    except Exception as e:
-        logger.error(f"Error getting reports by aggregate: {e}")
-        return None, e
+    request_string = f"/tellor-io/layer/oracle/get_reports_by_aggregate/{query_id}/{timestamp}?pagination.limit=10000"
+    return _query_layer_rest_api(request_string, "get_reports_by_aggregate")
     
 def get_current_aggregate_report(query_id: str) -> tuple[dict, Exception]:
     query_id = strip_0x(query_id)
-    swagger_endpoint = os.getenv("LAYER_SWAGGER_ENDPOINT")
-    request = f"{swagger_endpoint}/tellor-io/layer/oracle/get_current_aggregate_report/{query_id}"
-    try:
-        response = requests.get(request)
-        return response.json(), None
-    except Exception as e:
-        logger.error(f"Error getting current aggregate report: {e}")
-        return None, e
+    request_string = f"/tellor-io/layer/oracle/get_current_aggregate_report/{query_id}"
+    return _query_layer_rest_api(request_string, "get_current_aggregate_report")
+
+def get_current_tip(query_data: str) -> tuple[dict, Exception]:
+    query_data = strip_0x(query_data)
+    request_string = f"/tellor-io/layer/oracle/get_current_tip/{query_data}"
+    return _query_layer_rest_api(request_string, "get_current_tip")
 
 def get_snapshots_by_report(query_id: str, timestamp: int) -> tuple[dict, Exception]:
     query_id = strip_0x(query_id)
-    swagger_endpoint = os.getenv("LAYER_SWAGGER_ENDPOINT")
-    request = f"{swagger_endpoint}/layer/bridge/get_snapshots_by_report/{query_id}/{timestamp}"
-    try:
-        response = requests.get(request)
-        return response.json(), None
-    except Exception as e:
-        logger.error(f"Error getting snapshots by report: {e}")
-        return None, e
+    request_string = f"/layer/bridge/get_snapshots_by_report/{query_id}/{timestamp}"
+    return _query_layer_rest_api(request_string, "get_snapshots_by_report")
 
 def get_attestations_by_snapshot(snapshot: str) -> tuple[dict, Exception]:
-    swagger_endpoint = os.getenv("LAYER_SWAGGER_ENDPOINT")
-    request = f"{swagger_endpoint}/layer/bridge/get_attestations_by_snapshot/{snapshot}"
-    try:
-        response = requests.get(request)
-        return response.json(), None
-    except Exception as e:
-        logger.error(f"Error getting attestations by snapshot: {e}")
-        return None, e
+    request_string = f"/layer/bridge/get_attestations_by_snapshot/{snapshot}"
+    return _query_layer_rest_api(request_string, "get_attestations_by_snapshot")
 
 def get_attestation_data_by_snapshot(snapshot: str) -> tuple[dict, Exception]:
-    swagger_endpoint = os.getenv("LAYER_SWAGGER_ENDPOINT")
-    request = f"{swagger_endpoint}/layer/bridge/get_attestation_data_by_snapshot/{snapshot}"
-    try:
-        response = requests.get(request)
-        return response.json(), None
-    except Exception as e:
-        logger.error(f"Error getting attestation data by snapshot: {e}")
-        return None, e
+    request_string = f"/layer/bridge/get_attestation_data_by_snapshot/{snapshot}"
+    return _query_layer_rest_api(request_string, "get_attestation_data_by_snapshot")
 
-## queries
+def get_minimum_gas_prices() -> tuple[dict, Exception]:
+    request_string = f"/gaia/globalfee/v1beta1/minimum_gas_prices"
+    return _query_layer_rest_api(request_string, "get_minimum_gas_prices")
+
+def get_oracle_module_params() -> tuple[dict, Exception]:
+    request_string = f"/layer/oracle/params"
+    return _query_layer_rest_api(request_string, "get_oracle_module_params")
+
+# ************************************************************************************************
+#
+#                           Advanced Queries
+#
+# ************************************************************************************************
 
 def query_latest_oracle_data(query_id: str) -> tuple[dict, Exception]:
     logger.info("Querying latest oracle data")
@@ -194,20 +151,38 @@ def query_latest_oracle_data(query_id: str) -> tuple[dict, Exception]:
     report, e = get_data_before(query_id, current_time)
     if e:
         return None, e
+    if report is None or "timestamp" not in report:
+        return None, Exception("layer_client: No data found")
     return get_oracle_proof(query_id, report["timestamp"])
 
 def get_attestation_data_before(query_id: str, timestamp: int) -> tuple[dict, Exception]:
+    """
+    Get attestation data before a given timestamp
+
+    Args:
+        query_id: The query id
+        timestamp: The timestamp to get attestation data before in milliseconds
+
+    Returns:
+        A tuple containing the attestation data and an exception if an error occurs
+    """
     logger.info(f"Querying attestation data before {timestamp}")
     report, e = get_data_before(query_id, timestamp)
     if e:
         return None, e
+    if report is None or "timestamp" not in report:
+        return None, Exception("layer_client: No data found")
     snapshots, e = get_snapshots_by_report(query_id, report["timestamp"])
     if e:
         return None, e
+    if snapshots is None or "snapshots" not in snapshots:
+        return None, Exception("layer_client: No snapshots found")
     last_snapshot = snapshots["snapshots"][-1]
     attestation_data, e = get_attestation_data_by_snapshot(last_snapshot)
     if e:
         return None, e
+    if attestation_data is None or "timestamp" not in attestation_data:
+        return None, Exception("layer_client: No attestation data found")
     logger.debug(f"Attestation data: {attestation_data}")
     return attestation_data, None
 
@@ -221,6 +196,13 @@ def get_oracle_proof(query_id: str, timestamp: int) -> tuple[dict, Exception]:
     if e:
         return None, e
     attestation_data, e = get_attestation_data_by_snapshot(last_snapshot)
+    if e:
+        return None, e
+    checkpoint, e = get_validator_checkpoint()
+    if e:
+        return None, e
+    if checkpoint.get("validator_checkpoint") != attestation_data.get("checkpoint"):
+        return None, Exception("layer_client: Checkpoint mismatch")
     if e:
         return None, e
     current_validator_set, e = get_current_validator_set()
@@ -237,7 +219,8 @@ def get_oracle_proof(query_id: str, timestamp: int) -> tuple[dict, Exception]:
     if not sufficient_power:
         retry_sleep_time = 2
         retry_count = 0
-        while retry_count < 5:
+        max_retries = 5
+        while retry_count < max_retries:
             logger.warning(f"Insufficient attestation power, sleeping for {retry_sleep_time} seconds")
             time.sleep(retry_sleep_time)
             attestations, e = get_attestations_by_snapshot(last_snapshot)
@@ -364,3 +347,53 @@ def get_current_power_threshold() -> tuple[int, Exception]:
         return None, e
     return checkpoint_params.get("power_threshold"), None
 
+
+
+# ************************************************************************************************
+#
+#                           Helper functions
+#
+# ************************************************************************************************
+
+def strip_0x(value):
+    if value.startswith("0x"):
+        return value[2:]
+    return value
+
+def _check_api_response(response_data: dict, operation_name: str) -> Exception:
+    """
+    Check if API response indicates an error (no data found)
+
+    Args:
+        response_data: The response data from the layer rest api
+        operation_name: The name of the operation being performed
+    """
+    if isinstance(response_data, dict) and "code" in response_data:
+        error_message = response_data.get("message", "Unknown error")
+        logger.warning(f"{operation_name}: {error_message}")
+        return Exception(f"layer_client: {error_message}")
+    return None
+
+def _query_layer_rest_api(request_string: str, operation_name: str) -> tuple[dict, Exception]:
+    """
+    Query the layer rest api
+
+    Args:
+        request_string: The request string to query the layer rest api
+        operation_name: The name of the operation being performed
+
+    Returns:
+        A tuple containing the response data and an exception if an error occurs
+    """
+    swagger_endpoint = os.getenv("LAYER_SWAGGER_ENDPOINT")
+    request_url = f"{swagger_endpoint}{request_string}"
+    try:
+        response = requests.get(request_url)
+        response_data = response.json()
+        error = _check_api_response(response_data, operation_name)
+        if error:
+            return None, error
+        return response_data, None
+    except Exception as e:
+        logger.error(f"Error in {operation_name}: {e}")
+        return None, e

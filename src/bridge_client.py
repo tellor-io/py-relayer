@@ -1,9 +1,9 @@
 from web3 import Web3
 from eth_abi import encode
-from src.layer_client import query_latest_oracle_data, get_layer_connection_status
+from src.layer_client import query_latest_oracle_data, get_layer_connection_status, get_attestation_data_before
 from src.evm_client import EVMClient
 from src.transformer import transform_withdraw_tx_params
-from src.relayer import handle_validator_set_update
+from src.relayer import handle_validator_set_update, get_latest_oracle_proof_from_layer
 from src.layer_tx_client import request_attestations
 from src.logger_utils import get_logger
 import time
@@ -13,7 +13,7 @@ logger = get_logger(__name__)
 
 withdraw_delay = 43200 # seconds
 max_attestation_age = 43200 # seconds
-withdraw_id_to_relay = int(os.getenv("WITHDRAW_ID"))
+withdraw_id_to_relay = int(os.getenv("WITHDRAW_ID", "0"))
 
 # things to check:
 # 	- withdrawal id __exists__
@@ -30,14 +30,14 @@ def relay_withdraw(withdraw_id) -> (int, Exception):
     withdraw_query_id = get_withdraw_query_id(withdraw_id)
     logger.info(f"Withdraw query id: {withdraw_query_id}")
     # check if withdrawal id exists
-    oracle_proof, e = query_latest_oracle_data(withdraw_query_id)
+    attest_data, e = get_attestation_data_before(withdraw_query_id, int(time.time()) * 1000)
     if e:
         return None, e
     
-    logger.debug(f"Oracle proof: {oracle_proof}")
+    logger.debug(f"Attestation data: {attest_data}")
     
     # report old enough
-    report_ts = int(oracle_proof["attestation_data"]["timestamp"]) / 1000
+    report_ts = int(attest_data["timestamp"]) / 1000
     if time.time() - report_ts < withdraw_delay:
         logger.warning("Report too new")
         return None, e
@@ -47,6 +47,11 @@ def relay_withdraw(withdraw_id) -> (int, Exception):
     if claimed:
         logger.warning("Withdraw already claimed")
         return 1, None
+    
+    # get the latest oracle proof, with checkpoint mismatch check
+    oracle_proof, e = get_latest_oracle_proof_from_layer(withdraw_query_id)
+    if e:
+        return None, e
     
     # attestation recent enough
     attest_ts = int(oracle_proof["attestation_data"]["attestation_timestamp"]) / 1000
@@ -61,7 +66,7 @@ def relay_withdraw(withdraw_id) -> (int, Exception):
         # sleep for 5 seconds
         time.sleep(5)
         # get the new oracle proof
-        oracle_proof, e = query_latest_oracle_data(withdraw_query_id)
+        oracle_proof, e = get_latest_oracle_proof_from_layer(withdraw_query_id)
         if e:
             return None, e
         # check if the new oracle proof is recent enough
@@ -76,6 +81,7 @@ def relay_withdraw(withdraw_id) -> (int, Exception):
         logger.error(f"Error updating validator set: {e}")
         return None, e
     
+    # assemble the oracle update tx params and relay
     oracle_update_tx_params = transform_withdraw_tx_params(oracle_proof, withdraw_id)
     logger.debug(f"Oracle update tx params: {oracle_update_tx_params}")
     tx_hash = evm.withdraw_from_layer(oracle_update_tx_params)
@@ -83,21 +89,6 @@ def relay_withdraw(withdraw_id) -> (int, Exception):
         return None, Exception("Failed to withdraw from layer")
     logger.info(f"Oracle data updated: {tx_hash.hex()}")
     return 2, None
-
-def fill_list_until_error(next_withdraw_id):
-    append_list = []
-    fill_bool = True
-    while fill_bool is True:
-        next_withdraw_query_id = get_withdraw_query_id(next_withdraw_id)
-        oracle_data, e = query_latest_oracle_data(next_withdraw_query_id)
-        if e:
-            return append_list
-        withdraw_data = {
-            "withdraw_id": next_withdraw_id,
-            "oracle_data": oracle_data
-        }
-        append_list.append(withdraw_data)
-        next_withdraw_id += 1
 
 def get_withdraw_query_id(withdraw_id: int) -> str:
     query_data_args = encode(["bool", "uint256"], [False, withdraw_id])

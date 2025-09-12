@@ -134,12 +134,18 @@ def derive_signatures(signatures: list[str], validator_set: list[dict], checkpoi
     derived_signatures = []
     data = Web3.to_bytes(hexstr=checkpoint)
     message_hash = sha256(data).digest()
+    empty_sig = {
+        "v": 0,
+        "r": "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "s": "0x0000000000000000000000000000000000000000000000000000000000000000"
+    }
     for i in range(len(signatures)):
         signature = signatures[i]
         address = validator_set[i]["ethereumAddress"]
         if len(signature) == 128:
             r = "0x" + signature[:64]
             s = "0x" + signature[64:128]
+            found = False
             for v in [27, 28]:
                 recovered_address = ecrecover_raw_message(message_hash, v, r, s)
                 if recovered_address.lower() == address.lower():
@@ -148,12 +154,12 @@ def derive_signatures(signatures: list[str], validator_set: list[dict], checkpoi
                         "r": r,
                         "s": s
                     })
+                    found = True
+                    break
+            if not found:
+                derived_signatures.append(empty_sig)
         else:
-            derived_signatures.append({
-                "v": 0,
-                "r": "0x0000000000000000000000000000000000000000000000000000000000000000",
-                "s": "0x0000000000000000000000000000000000000000000000000000000000000000"
-            })
+            derived_signatures.append(empty_sig)
 
     return derived_signatures
 

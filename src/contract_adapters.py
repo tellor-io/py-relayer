@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 import time
 from src.logger_utils import get_logger
+from eth_abi import decode
 
 logger = get_logger(__name__)
 
@@ -15,6 +16,33 @@ class ContractAdapter(ABC):
     @abstractmethod
     def update_oracle_data(self, contract, params):
         """Call the appropriate contract method with transformed parameters"""
+        pass
+
+class ReadableContractAdapter(ABC):
+    """Mixin interface for contract adapters that can read data from contracts"""
+    
+    @abstractmethod
+    def get_last_relayed_data(self, contract, **kwargs):
+        """Get the last relayed data from the contract
+        
+        Args:
+            contract: The contract instance
+            
+        Returns:
+            The raw data from the contract (format depends on contract)
+        """
+        pass
+    
+    @abstractmethod 
+    def decode_last_relayed_data(self, data):
+        """Decode the last relayed data into a standardized format
+        
+        Args:
+            data: The raw data from get_last_relayed_data
+            
+        Returns:
+            dict: Standardized format with keys like 'price', 'timestamp', etc.
+        """
         pass
 
 class SimpleLayerUserAdapter(ContractAdapter):
@@ -133,7 +161,7 @@ class YoloTellorUserAdapter(ContractAdapter):
     
     def update_oracle_data(self, contract, params):
         """
-        Call the updateOracleData function on the YoloTellorUser contract
+        Create the updateOracleData function call on the YoloTellorUser contract
         
         Args:
             contract: The contract instance
@@ -153,13 +181,124 @@ class YoloTellorUserAdapter(ContractAdapter):
             params["current_validator_set"],
             params["signatures"]
         )
+    
+class TellorDataBankAdaptor(ContractAdapter, ReadableContractAdapter):
+    """Adapter for TellorDataBank contract with read capabilities"""
+    
+    def prepare_update_params(self, oracle_data, user_data=None):
+        """
+        Transform oracle data into TellorDataBank contract parameters
+
+        Args:
+            oracle_data: The oracle data from the Layer chain
+            user_data: Additional user-specific data (none needed)
+        """
+        # Extract standard parameters
+        attestation_data = oracle_data.get("oracle_attestation_data")
+        current_validator_set = oracle_data.get("current_validator_set")
+        signatures = oracle_data.get("sigs")
+
+        return {
+            "attestation_data": attestation_data,
+            "current_validator_set": current_validator_set,
+            "signatures": signatures
+        }
+    
+    def update_oracle_data(self, contract, params):
+        """
+        Create the updateOracleData function call on the TellorDataBank contract
+        
+        Args:
+            contract: The contract instance
+            params: The parameters for the function
+        
+        Returns:
+            ContractFunction: The contract function to call
+        """
+        
+        return contract.functions.updateOracleData(
+            params["attestation_data"],
+            params["current_validator_set"],
+            params["signatures"]
+        )
+    
+    def get_last_relayed_data(self, contract, query_id):
+        """
+        Create the getCurrentAggregateData function call on the TellorDataBank contract
+
+        Returns:
+            ContractFunction: The contract function to call
+        """
+        # Get the current aggregate data for the query id
+        return contract.functions.getCurrentAggregateData(query_id)
+    
+    def decode_last_relayed_data(self, data):
+        """
+        Decode the last relayed data from the TellorDataBank contract
+
+        Args:
+            data: The AggregateData struct from getCurrentAggregateData function call
+
+        Returns:
+            dict: The decoded data
+        """
+        # AggregateData struct: (bytes value, uint256 power, uint256 aggregateTimestamp, uint256 attestationTimestamp, uint256 relayTimestamp)
+        # data[0] = value (bytes)
+        # data[1] = power (uint256) 
+        # data[2] = aggregateTimestamp (uint256, in milliseconds)
+        # data[3] = attestationTimestamp (uint256, in milliseconds)
+        # data[4] = relayTimestamp (uint256, in seconds)
+        
+        try:
+            value_decoded = decode(["uint256"], data[0])  # This is already bytes
+            # divide by 10^18 to get the price
+            value_int = value_decoded[0] / 10**18
+            timestamp_s = int(data[2]) / 1000  # aggregateTimestamp in seconds
+            relay_timestamp_s = int(data[4])
+
+            return {
+                    "value": [value_int],  # Wrap in list to match expected format in price comparison
+                    "timestamp": timestamp_s,
+                    "relay_timestamp": relay_timestamp_s 
+                }
+        except Exception as e:
+            logger.error(f"Error decoding last relayed data: {e}")
+            return None
 
 # Factory to get the appropriate adapter
 def get_contract_adapter(contract_type):
     adapters = {
         "SimpleLayerUser": SimpleLayerUserAdapter(),
         "TestPriceFeedUser": TestPriceFeedUserAdapter(),
-        "YoloTellorUser": YoloTellorUserAdapter()
+        "YoloTellorUser": YoloTellorUserAdapter(),
+        "TellorDataBank": TellorDataBankAdaptor()
     }
     
-    return adapters.get(contract_type, None) 
+    return adapters.get(contract_type, None)
+
+# Utility functions for adapter capabilities
+def adapter_can_read_data(adapter):
+    """Check if an adapter supports reading data from contracts
+    
+    Args:
+        adapter: The contract adapter instance
+        
+    Returns:
+        bool: True if the adapter can read data, False otherwise
+    """
+    return isinstance(adapter, ReadableContractAdapter)
+
+def get_last_relayed_data_if_supported(adapter, contract):
+    """Get last relayed data if the adapter supports it
+    
+    Args:
+        adapter: The contract adapter instance
+        contract: The contract instance
+        
+    Returns:
+        dict or None: The decoded data if supported, None otherwise
+    """
+    if adapter_can_read_data(adapter):
+        raw_data = adapter.get_last_relayed_data(contract)
+        return adapter.decode_last_relayed_data(raw_data)
+    return None 

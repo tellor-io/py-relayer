@@ -105,16 +105,9 @@ def start_tipper():
         }
         
         # Update oracle data using the appropriate contract
-        result = evm.update_oracle_data(oracle_data, CONTRACT_TYPE, user_data)
-        if isinstance(result, tuple) and len(result) == 2:
-            tx_hash, e = result
-            if e:
-                logger.error(f"Error updating oracle data: {e}")
-                logger.info(f"Sleeping for {ITERATION_SLEEP_TIME} seconds")
-                time.sleep(ITERATION_SLEEP_TIME)
-                continue
-        else:
-            logger.error(f"Unexpected result from update_oracle_data: {result}")
+        tx_hash, e = evm.update_oracle_data(oracle_data, CONTRACT_TYPE, user_data)
+        if e:
+            logger.error(f"Error updating oracle data: {e}")
             logger.info(f"Sleeping for {ITERATION_SLEEP_TIME} seconds")
             time.sleep(ITERATION_SLEEP_TIME)
             continue

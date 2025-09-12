@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-def generate_power_report(csv_file="data/layer_data.csv", show_terminal_plot=False, micro_report=False):
+def generate_power_report(csv_file="data/layer_data.csv", show_terminal_plot=False, micro_report=False, assume_all_existed_from_start=False):
     # Read the CSV file
     df = pd.read_csv(csv_file)
     
@@ -101,32 +101,36 @@ def generate_power_report(csv_file="data/layer_data.csv", show_terminal_plot=Fal
     if micro_report:
         micro_csv = csv_file.replace('.csv', '_micro.csv')
         if os.path.exists(micro_csv):
-            generate_micro_report(micro_csv)
+            generate_micro_report(micro_csv, assume_all_existed_from_start)
         else:
             print(f"\nNo micro report data found at {micro_csv}")
     
     return stats
 
-def generate_micro_report(micro_csv_file):
+def generate_micro_report(micro_csv_file, assume_all_existed_from_start=False):
     """Analyze micro reports data and generate participation statistics"""
     df = pd.read_csv(micro_csv_file)
     
     # Get unique reporters and their first appearance timestamps
     reporter_first_seen = df.groupby('reporter')['timestamp'].min().to_dict()
     
+    # Calculate total possible reports for the entire period
+    total_aggregate_reports = len(df.groupby('timestamp'))
+    
     # Calculate participation stats for each reporter
     reporter_stats = {}
     
     for reporter in reporter_first_seen:
-        # Get total number of aggregate reports since this reporter's first appearance
-        reporter_start_time = reporter_first_seen[reporter]
-        total_possible_reports = len(df[df['timestamp'] >= reporter_start_time].groupby('timestamp'))
+        if assume_all_existed_from_start:
+            # Use total aggregate count from the beginning
+            total_possible_reports = total_aggregate_reports
+        else:
+            # Get total number of aggregate reports since this reporter's first appearance
+            reporter_start_time = reporter_first_seen[reporter]
+            total_possible_reports = len(df[df['timestamp'] >= reporter_start_time].groupby('timestamp'))
         
         # Get actual number of reports from this reporter
-        reporter_reports = len(df[
-            (df['reporter'] == reporter) & 
-            (df['timestamp'] >= reporter_start_time)
-        ])
+        reporter_reports = len(df[df['reporter'] == reporter])
         
         # Get reporter's power (assuming constant throughout period)
         reporter_power = df[df['reporter'] == reporter]['power'].iloc[0]
@@ -142,7 +146,8 @@ def generate_micro_report(micro_csv_file):
         }
     
     # Print participation stats
-    print("\nReporter Participation Statistics:")
+    participation_mode = "from start" if assume_all_existed_from_start else "from first seen"
+    print(f"\nReporter Participation Statistics (calculated {participation_mode}):")
     print(f"{'Reporter':<45} {'Power':<8} {'Rate':>6} {'Reports':>8} {'Possible':>10}")
     print("-" * 80)
     
