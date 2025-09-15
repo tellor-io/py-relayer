@@ -66,7 +66,7 @@ def send_transaction_with_retry(web3_instance, web3_acct, contract_function, bas
             
             tx = contract_function.build_transaction(tx_params)
             signed_tx = web3_instance.eth.account.sign_transaction(tx, private_key=web3_acct.key)
-            tx_hash = web3_instance.eth.send_raw_transaction(signed_tx.rawTransaction)
+            tx_hash = web3_instance.eth.send_raw_transaction(signed_tx.raw_transaction)
             
             logger.info(f"Transaction submitted successfully on attempt {attempt + 1} with nonce {current_nonce}")
             return tx_hash, None
@@ -226,7 +226,7 @@ class EVMClient:
             logger.debug(f"Signed transaction: {signed_tx}")
 
             # Send the transaction
-            tx_hash = self.web3_instance.eth.send_raw_transaction(signed_tx.rawTransaction)
+            tx_hash = self.web3_instance.eth.send_raw_transaction(signed_tx.raw_transaction)
             logger.info(f"Tx hash: {tx_hash.hex()}")
             
             # Wait for receipt and check success
@@ -380,7 +380,7 @@ class EVMClient:
             })
             logger.info(f"Tx: {tx}")
             signed_tx = self.web3_instance.eth.account.sign_transaction(tx, private_key=self.web3_acct.key)
-            tx_hash = self.web3_instance.eth.send_raw_transaction(signed_tx.rawTransaction)
+            tx_hash = self.web3_instance.eth.send_raw_transaction(signed_tx.raw_transaction)
             logger.info(f"Tx hash: {tx_hash.hex()}")
             
             # Wait for receipt and check success
@@ -409,7 +409,7 @@ class EVMClient:
             })
             logger.info(f"Tx: {tx}")
             signed_tx = self.web3_instance.eth.account.sign_transaction(tx, private_key=self.web3_acct.key)
-            tx_hash = self.web3_instance.eth.send_raw_transaction(signed_tx.rawTransaction)
+            tx_hash = self.web3_instance.eth.send_raw_transaction(signed_tx.raw_transaction)
             logger.info(f"Tx hash: {tx_hash.hex()}")
             
             # Wait for receipt and check success
@@ -438,7 +438,7 @@ class EVMClient:
                 'gasPrice': int(self.web3_instance.eth.gas_price * 1.25)
             })
             signed_tx = self.web3_instance.eth.account.sign_transaction(tx, self.web3_acct.key)
-            tx_hash = self.web3_instance.eth.send_raw_transaction(signed_tx.rawTransaction)
+            tx_hash = self.web3_instance.eth.send_raw_transaction(signed_tx.raw_transaction)
             logger.info(f"Withdraw tx hash: {tx_hash.hex()}")
             
             # Wait for receipt and check success

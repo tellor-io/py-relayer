@@ -72,6 +72,30 @@ def to_checksum_address(address: str) -> str:
         # Fallback to lowercase if Web3 not available
         return address.lower()
 
+def validate_layer_endpoints(layer_swagger, layer_rpc):
+    """Validate that Layer endpoints are accessible"""
+    import requests
+    try:
+        # Test swagger endpoint with a real API path
+        logger.info(f"Testing swagger endpoint: {layer_swagger}/layer/bridge/get_validator_checkpoint")
+        swagger_response = requests.get(f"{layer_swagger}/layer/bridge/get_validator_checkpoint", timeout=10)
+        if swagger_response.status_code != 200:
+            logger.warning(f"Layer swagger endpoint returned status {swagger_response.status_code}")
+            return False
+        
+        # Test RPC endpoint
+        logger.info(f"Testing RPC endpoint: {layer_rpc}/status")
+        rpc_response = requests.get(f"{layer_rpc}/status", timeout=10)
+        if rpc_response.status_code != 200:
+            logger.warning(f"Layer RPC endpoint returned status {rpc_response.status_code}")
+            return False
+            
+        logger.info("Layer endpoints validated successfully")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to validate Layer endpoints: {e}")
+        return False
+
 @click.group()
 @add_logging_options
 @click.pass_context
@@ -418,6 +442,14 @@ def relay_threshold(query_id, query_data, query_string, sleep_time, price_thresh
         final_query_id, final_query_data = query_id, query_data
     else:
         logger.error("Either --query-string or both --query-id and --query-data must be provided")
+        exit(1)
+    
+    # Validate Layer endpoints before starting
+    logger.info("Validating Layer blockchain endpoints...")
+    if not validate_layer_endpoints(layer_swagger, layer_rpc):
+        logger.error("Layer endpoint validation failed. Please check your LAYER_SWAGGER_ENDPOINT and LAYER_RPC_ENDPOINT configuration.")
+        logger.error(f"LAYER_SWAGGER_ENDPOINT: {layer_swagger}")
+        logger.error(f"LAYER_RPC_ENDPOINT: {layer_rpc}")
         exit(1)
     
     # set environment variables
