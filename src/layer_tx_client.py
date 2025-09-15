@@ -4,10 +4,14 @@ import subprocess
 import time
 import random
 import json
+import os
 
 logger = get_logger(__name__)
 __minimum_gas_prices = "0loya"
 __minimum_tip_amount = "0loya"
+
+# Get the layer binary path from environment variable
+LAYER_BINARY_PATH = os.getenv("LAYER_BINARY_PATH", "layerd")
 
 def is_sequence_error(error_output) -> bool:
     """
@@ -46,7 +50,7 @@ def get_account_sequence(layer_address, layer_rpc_endpoint, chain_id="layertest-
     try:
         # Use the auth module to query account information
         result = subprocess.run(
-            ["layerd", "query", "auth", "account", layer_address,
+            [LAYER_BINARY_PATH, "query", "auth", "account", layer_address,
              "--chain-id", chain_id,
              "--node=" + layer_rpc_endpoint,
              "--output", "json"],
@@ -168,7 +172,7 @@ def tip(query_data, layer_address, layer_rpc_endpoint, chain_id="layertest-4") -
     
     # Build the command arguments
     command_args = [
-        "layerd", "tx", "oracle", "tip",
+        LAYER_BINARY_PATH, "tx", "oracle", "tip",
         query_data_stripped,
         min_tip_amount, 
         "--from", layer_address_str, 
@@ -227,7 +231,7 @@ def request_attestations(query_id, timestamp, layer_address, layer_rpc_endpoint,
     
     # Build the command arguments
     command_args = [
-        "layerd", "tx", "bridge", "request-attestations",
+        LAYER_BINARY_PATH, "tx", "bridge", "request-attestations",
         layer_address_str,
         query_id_str,
         timestamp_str,
@@ -275,7 +279,7 @@ def minimum_tip_amount():
         __minimum_tip_amount, error = get_oracle_module_params()
         if error or __minimum_tip_amount is None:
             logger.error(f"Error getting minimum tip amount: {error}")
-            return "10000loya"
+            return "1001loya"
         __minimum_tip_amount = __minimum_tip_amount["params"]["minTipAmount"] + "loya"
         logger.debug(f"Minimum tip amount set to: {__minimum_tip_amount}")
     return __minimum_tip_amount

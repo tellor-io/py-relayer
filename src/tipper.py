@@ -30,6 +30,8 @@ def start_tipper():
     CONTRACT_TYPE = os.getenv("CONTRACT_TYPE", "SimpleLayerUser")
     N_ITERATIONS = 50
     ITERATION_SLEEP_TIME = int(os.getenv("SLEEP_TIME", 3600)) # seconds between iterations
+    CHAIN_ID = os.getenv("CHAIN_ID", "layertest-4")
+    LAYER_BINARY_PATH = os.getenv("LAYER_BINARY_PATH", "layerd")
 
     logger.info(f"Starting tipper for contract type {CONTRACT_TYPE}...")
     
@@ -67,7 +69,7 @@ def start_tipper():
         previous_report_timestamp = int(previous_report["timestamp"])
         logger.info(f"Start time: {start_time}")
 
-        e = tip(QUERY_DATA, LAYER_ADDRESS, LAYER_RPC_ENDPOINT)
+        e = tip(QUERY_DATA, LAYER_ADDRESS, LAYER_RPC_ENDPOINT, CHAIN_ID, LAYER_BINARY_PATH)
         if e:
             logger.error(f"Error tipping: {e}")
             logger.info(f"Sleeping for {ITERATION_SLEEP_TIME} seconds")
@@ -124,18 +126,17 @@ def start_tipper():
         logger.info(f"Sleeping for {ITERATION_SLEEP_TIME} seconds")
         time.sleep(ITERATION_SLEEP_TIME)
 
-def tip(query_data, layer_address, layer_rpc_endpoint) -> Exception:
+def tip(query_data, layer_address, layer_rpc_endpoint, chain_id, layer_binary_path="layerd") -> Exception:
     # Remove '0x' prefix if it exists
     query_data_stripped = strip_0x(query_data)
     
     try:
         result = subprocess.run(
-            ["layerd", "tx", "oracle", "tip",
-             layer_address,  
+            [layer_binary_path, "tx", "oracle", "tip",
              query_data_stripped,
              "100000loya", 
              "--from", layer_address, 
-             "--chain-id", "layertest-3", 
+             "--chain-id", chain_id, 
              "--fees", "5loya", 
              "--keyring-backend", "test", 
              "--yes", 
