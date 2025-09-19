@@ -73,6 +73,10 @@ class ThresholdRelayer:
         # initialize heartbeat
         self.next_heartbeat_time = get_next_heartbeat_time(self.heartbeat_interval, self.offset)
         logger.info(f"Next heartbeat time: {self.next_heartbeat_time}")
+        should_tip = False
+        should_relay = False
+        tip_reason = ""
+        relay_reason = ""
 
         # main loop
         while True:
@@ -126,7 +130,13 @@ class ThresholdRelayer:
                 logger.error(f"Unexpected error in main loop: {e}")
 
             # sleep for check interval
-            sleep(self.check_interval)
+            # if tipped for price threshold change on this round, only sleep for 20 seconds
+            # if should_tip and tip_reason string contains "threshold tip"
+            price_threshold_check_interval = 20
+            if should_tip and "threshold tip" in tip_reason and price_threshold_check_interval < self.check_interval:
+                sleep(price_threshold_check_interval)
+            else:
+                sleep(self.check_interval)
 
     def get_latest_agg_report(self, query_id: str) -> tuple[dict, Exception]:
         """Get the latest aggregate report from Layer"""
@@ -494,7 +504,7 @@ class ThresholdRelayer:
     def get_price_from_api(self) -> tuple[float, Exception]:
         """Get the current price from the API"""
         current_time = time.time()
-        if current_time - self.latest_api_price["timestamp"] > 30:
+        if current_time - self.latest_api_price["timestamp"] > 10:
             latest_price, error = get_current_price_from_api()
             if error:
                 logger.error(f"Error getting current price from API: {error}")

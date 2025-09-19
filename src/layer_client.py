@@ -58,8 +58,6 @@ def get_layer_chain_id() -> tuple[str, Exception]:
         return None, e
     return layer_status.get("result").get("node_info").get("network"), None
 
-
-
 # ************************************************************************************************
 #
 #                           Layer REST API Queries
@@ -136,6 +134,10 @@ def get_minimum_gas_prices() -> tuple[dict, Exception]:
 def get_oracle_module_params() -> tuple[dict, Exception]:
     request_string = f"/layer/oracle/params"
     return _query_layer_rest_api(request_string, "get_oracle_module_params")
+
+def get_bridge_module_params() -> tuple[dict, Exception]:
+    request_string = f"/layer/bridge/params"
+    return _query_layer_rest_api(request_string, "get_bridge_module_params")
 
 # ************************************************************************************************
 #
@@ -347,7 +349,15 @@ def get_current_power_threshold() -> tuple[int, Exception]:
         return None, e
     return checkpoint_params.get("power_threshold"), None
 
-
+def get_mainnet_chain_id() -> tuple[str, Exception]:
+    bridge_module_params, e = get_bridge_module_params()
+    if e:
+        return None, e
+    if not bridge_module_params.get("params"):
+        return None, Exception("layer_client: No params found")
+    if not bridge_module_params.get("params").get("mainnet_chain_id"):
+        return None, Exception("layer_client: No mainnet chain id found")
+    return bridge_module_params.get("params").get("mainnet_chain_id"), None
 
 # ************************************************************************************************
 #

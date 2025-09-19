@@ -283,7 +283,7 @@ def data_bridge_reset(evm: EVMClient) -> Exception:
         print_reset_for_etherscan(reset_tx_params)
         return None
     
-    evm.reset_data_bridge(reset_tx_params)  # Use evm instance method
+    evm.reset_data_bridge_testnet(reset_tx_params)  # Use evm instance method
     return None
 
 def update_to_latest_layer_validator_set(evm: EVMClient, data_bridge_validator_timestamp: str, layer_validator_timestamp: str) -> Exception:
