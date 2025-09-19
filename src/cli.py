@@ -12,6 +12,7 @@ from src.logger_utils import setup_logging
 from src.logger_utils import get_logger
 from src.valset_relayer import start_valset_relayer
 from src.query_parser import QueryParser
+from src.config_loader import load_config, apply_env, build_default_map
 
 logger = get_logger(__name__)
 
@@ -74,14 +75,37 @@ def to_checksum_address(address: str) -> str:
 
 @click.group()
 @add_logging_options
+@click.option('--config', '-c', help='Config name or path', default=None)
 @click.pass_context
-def cli(ctx, verbose, no_color):
+def cli(ctx, verbose, no_color, config):
     """Layer Relayer CLI"""
     # Load .env file as fallback
     load_dotenv(override=True)
     
     # setup logging with global options - only once here
     configure_logging(verbose=verbose, no_color=no_color)
+    
+    # Load config if provided, apply env and command defaults
+    try:
+        cfg = load_config(config)
+        if cfg:
+            apply_env(cfg)
+            # Attach command defaults for subcommands
+            ctx.default_map = (ctx.default_map or {})
+            # Merge existing default_map with our config-based defaults
+            cfg_defaults = build_default_map(cfg)
+            # Shallow merge at top level (per command mapping)
+            for k, v in cfg_defaults.items():
+                prev = ctx.default_map.get(k, {}) if isinstance(ctx.default_map, dict) else {}
+                if isinstance(prev, dict):
+                    merged = dict(prev)
+                    merged.update(v)
+                    ctx.default_map[k] = merged
+                else:
+                    ctx.default_map[k] = v
+    except Exception as e:
+        logger.error(f"Failed to load config '{config}': {e}")
+        exit(1)
     
     # store options in context for subcommands
     ctx.ensure_object(dict)
