@@ -5,7 +5,6 @@ from src.relayer import start_relayer, update_user_oracle_data, data_bridge_init
 from src.threshold_relayer import start_primary_threshold_relayer, start_backup_threshold_relayer
 from src.bridge_client import relay_withdraw
 from src.evm_client import EVMClient
-from src.tipper import start_tipper
 from src.layer_scraper import scrape_layer
 from src.report import generate_power_report
 from src.logger_utils import setup_logging
@@ -13,6 +12,7 @@ from src.logger_utils import get_logger
 from src.valset_relayer import start_valset_relayer
 from src.query_parser import QueryParser
 from src.config_loader import load_config, apply_env, build_default_map
+from src.price_service import run_price_service
 
 logger = get_logger(__name__)
 
@@ -278,59 +278,6 @@ def relay_bridge(withdraw_id, eth_private_key, web3_provider, layer_swagger, lay
 
 @cli.command()
 @add_logging_options
-@click.option('--query-id', envvar='QUERY_ID', help='Query ID to tip (alternative to --query-string)')
-@click.option('--query-data', envvar='QUERY_DATA', help='Query data to tip (alternative to --query-string)')
-@click.option('--query-string', envvar='QUERY_STRING', help='Query string like "SpotPrice(eth,usd)" (alternative to --query-id/--query-data)')
-@click.option('--layer-address', envvar='LAYER_ADDRESS', required=True, help='Layer address')
-@click.option('--sleep-time', envvar='SLEEP_TIME', type=int, default=3600, help='Sleep time between iterations in seconds')
-@click.option('--layer-rpc', envvar='LAYER_RPC_ENDPOINT', required=True, help='Layer RPC endpoint')
-@click.option('--eth-private-key', envvar='ETH_PRIVATE_KEY', required=True, help='Ethereum private key')
-@click.option('--data-bridge-address', envvar='DATA_BRIDGE_CONTRACT_ADDRESS', required=True, help='Tellor data bridge contract address')
-@click.option('--layer-user-address', envvar='LAYER_USER_CONTRACT_ADDRESS', help='Layer user contract address')
-@click.option('--web3-provider', envvar='WEB3_PROVIDER_URL', required=True, help='Web3 provider URL')
-@click.option('--layer-swagger', envvar='LAYER_SWAGGER_ENDPOINT', required=True, help='Layer swagger endpoint')
-@click.option('--contract-type', envvar='CONTRACT_TYPE', type=click.Choice(['SimpleLayerUser', 'TestPriceFeedUser']), default='SimpleLayerUser', 
-              help='Type of contract to use for relaying')
-def tip(query_id, query_data, query_string, layer_address, layer_rpc, eth_private_key, web3_provider, layer_swagger, 
-        data_bridge_address, layer_user_address, contract_type, sleep_time, verbose, no_color):
-    """Start the tipper process"""
-    configure_logging(verbose=verbose, no_color=no_color)
-    
-    # validate that either query_id/query_data or query_string is provided
-    if query_string:
-        if query_id or query_data:
-            logger.warning("Both --query-string and --query-id/--query-data provided. Using --query-string.")
-        final_query_id, final_query_data = parse_query_string_if_provided(query_string, None, None)
-    elif query_id and query_data:
-        final_query_id, final_query_data = query_id, query_data
-    else:
-        logger.error("Either --query-string or both --query-id and --query-data must be provided")
-        exit(1)
-    
-    # Set environment variables
-    os.environ['QUERY_ID'] = final_query_id
-    os.environ['QUERY_DATA'] = final_query_data
-    os.environ['LAYER_ADDRESS'] = layer_address
-    os.environ['LAYER_RPC_ENDPOINT'] = layer_rpc
-    os.environ['ETH_PRIVATE_KEY'] = to_checksum_address(eth_private_key)
-    os.environ['WEB3_PROVIDER_URL'] = web3_provider
-    os.environ['LAYER_SWAGGER_ENDPOINT'] = layer_swagger
-    os.environ['DATA_BRIDGE_CONTRACT_ADDRESS'] = to_checksum_address(data_bridge_address)
-    os.environ['LAYER_USER_CONTRACT_ADDRESS'] = to_checksum_address(layer_user_address)
-    os.environ['CONTRACT_TYPE'] = contract_type
-    os.environ['SLEEP_TIME'] = str(sleep_time)
-    
-    try:
-        start_tipper()
-    except KeyboardInterrupt:
-        logger.info("\nTipper stopped by user.")
-        exit(0)
-    except Exception as e:
-        logger.error(f"Error starting tipper: {e}")
-        exit(1)
-
-@cli.command()
-@add_logging_options
 @click.option('--query-id', envvar='QUERY_ID', help='Query ID to scrape (alternative to --query-string)')
 @click.option('--query-string', envvar='QUERY_STRING', help='Query string like "SpotPrice(eth,usd)" (alternative to --query-id)')
 @click.option('--scrape-count', type=int, default=1000, help='Number of data points to scrape')
@@ -548,3 +495,20 @@ def parse_query(query_string, verbose, no_color):
 
 if __name__ == '__main__':
     cli() 
+
+@cli.command()
+@add_logging_options
+@click.option('--host', envvar='PRICE_SERVICE_HOST', default=None, help='Price service host (override)')
+@click.option('--port', envvar='PRICE_SERVICE_PORT', type=int, default=None, help='Price service port (override)')
+def price_service(host, port, verbose, no_color):
+    """Run the HTTP price-service for batched provider fetching"""
+    configure_logging(verbose=verbose, no_color=no_color)
+    cfg_ref = os.environ.get('PRICE_SERVICE_CONFIG', 'price-service')
+    try:
+        run_price_service(cfg_ref, host=host, port=port)
+    except KeyboardInterrupt:
+        logger.info("\nPrice service stopped by user.")
+        exit(0)
+    except Exception as e:
+        logger.error(f"Error running price service: {e}")
+        exit(1)

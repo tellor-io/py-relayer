@@ -8,6 +8,7 @@ from src.transformer import transform_data_bridge_init_params, transform_valset_
 from src.email_client import send_email_alert
 from src.layer_tx_client import request_attestations
 from src.logger_utils import get_logger
+from src.price_service_client import get_price_from_service
 
 logger = get_logger(__name__)
 
@@ -468,6 +469,15 @@ def get_current_price_from_api() -> tuple[float, Exception]:
     """
     Get the current price from the API or Layer chain
     """
+    # Prefer price-service if configured
+    try:
+        price, svc_err = get_price_from_service()
+        if svc_err is None and price is not None:
+            logger.debug(f"Price from price-service: {price}")
+            return price, None
+    except Exception as _:
+        pass
+
     api_url = os.getenv("PRICE_API_URL")
     
     if api_url:

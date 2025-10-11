@@ -1,0 +1,12 @@
+# ETH/USD Price Feed Configuration for Sepolia
+extends = ["sepolia-shared"]
+
+[env]
+FEED_NAME = "eth-usd"
+COINGECKO_ID = "ethereum"
+
+[commands.relay-threshold]
+query_string = "SpotPrice(eth,usd)"
+price_threshold = 0.02  # 1% threshold for ETH
+offset = 0
+price_api_url = "https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd"

@@ -1,0 +1,23 @@
+extends = ["saga-shared"]
+
+[env]
+FEED_NAME = "btc-usd"
+PRICE_SERVICE_URL = "http://127.0.0.1:8787"
+
+[commands.relay-threshold]
+query_string = "SpotPrice(btc,usd)"
+price_threshold = 0.01
+offset = 0
+
+# BTC/USD Price Feed Configuration for Saga
+extends = ["saga-shared"]
+
+[env]
+FEED_NAME = "BTC/USD"
+COINGECKO_ID = "bitcoin"
+
+[commands.relay-threshold]
+query_string = "SpotPrice(btc,usd)"
+price_threshold = 0.02  # 1% threshold for BTC
+offset = 10
+price_api_url = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd"

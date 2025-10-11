@@ -1,6 +1,6 @@
 # Layer Relayer
 
-This is a simple relayer that relays oracle data and validator set updates from tellor layer to evm chains.
+Relayers for Tellor Layer that synchronize validator sets, relay oracle data to EVM chains, and relay token-bridge withdrawals. Includes a threshold relayer driven by heartbeat and external price-change thresholds, and a shared HTTP price-service supporting batched provider queries.
 
 ## Setup
 
@@ -52,14 +52,18 @@ After installing these dependencies, proceed with the setup instructions above.
 
 ## Usage
 
-The relayer provides several commands through its CLI:
+The CLI provides the following commands:
 
-### Start Relaying
+### Simple Oracle Relayer (interval-based)
 ```bash
-relayer relay --layer-test-user-address 0x39C93320776D7D9F75798fEF42C72433b718726d --data-bridge-address 0xc7670AeD260Ce55830D0766Eb4E5A04bE56979d3 --contract-type TestPriceFeedUser --sleep-time 900
+relayer relay --query-string "SpotPrice(eth,usd)" \
+  --data-bridge-address <DATA_BRIDGE> \
+  --layer-user-address <USER_CONTRACT> \
+  --web3-provider <RPC> --layer-swagger <LAYER_API> --layer-rpc <LAYER_RPC> \
+  --sleep-time 900 --fixed-interval
 ```
 
-### Relay Token Bridge Withdraw
+### Token Bridge Withdraw Relayer
 ```bash
 relayer relay-bridge --data-bridge-address 0xa73Efa04476B45E5bBAa68A59f7Ee2A21e14FDD4 --token-bridge-address 0x6ac02F3887B358591b8B2D22CfB1F36Fa5843867 --withdraw-id 8
 ```
@@ -77,20 +81,71 @@ relayer reset
 ```
 
 ### Threshold Relayer (Primary)
-This relays data to the TellorDataBank contract based on a heartbeat and price change threshold.
+Heartbeat + price-threshold driven relayer to `TellorDataBank`. Uses external price(s) from the price-service (if configured), else falls back to a single `PRICE_API_URL`, else Layer aggregate.
 ```bash
-relayer relay-threshold --query-string "SpotPrice(eth,usd)" --price-threshold 0.01 --data-bridge-address DATA_BRIDGE_CONTRACT_ADDRESS --layer-user-address LAYER_USER_CONTRACT_ADDRESS --layer-tx-creator-address LAYER_ADDRESS
+relayer relay-threshold --query-string "SpotPrice(eth,usd)" --price-threshold 0.01 \
+  --data-bridge-address <DATA_BRIDGE> --layer-user-address <DATABANK> \
+  --web3-provider <RPC> --layer-swagger <LAYER_API> --layer-rpc <LAYER_RPC> \
+  --layer-tx-creator-address <LAYER_ADDR>
 ```
 
 ### Threshold Relayer (Backup)
-This acts as a backup for the threshold relayer so that if the primary relayer fails, the backup can take over. The backup relayer should use a slightly higher price threshold and heartbeat interval than the primary relayer.
+Conservative gates and higher thresholds/heartbeat.
 ```bash
-relayer relay-threshold --backup --query-string "SpotPrice(eth,usd)" --price-threshold 0.01 --data-bridge-address DATA_BRIDGE_CONTRACT_ADDRESS --layer-user-address LAYER_USER_CONTRACT_ADDRESS --web3-provider WEB3_PROVIDER_URL --layer-swagger LAYER_SWAGGER_ENDPOINT --layer-rpc LAYER_RPC_ENDPOINT --layer-tx-creator-address LAYER_ADDRESS
+relayer relay-threshold --backup --query-string "SpotPrice(eth,usd)" --price-threshold 0.015 \
+  --data-bridge-address <DATA_BRIDGE> --layer-user-address <DATABANK> \
+  --web3-provider <RPC> --layer-swagger <LAYER_API> --layer-rpc <LAYER_RPC> \
+  --layer-tx-creator-address <LAYER_ADDR>
 ```
 
-To see all available options for each command:
+### Validator Set Relayer
+Sync the EVM bridge validator set to Layer periodically (no oracle relay):
+```bash
+relayer relay-valset --data-bridge-address <DATA_BRIDGE> \
+  --web3-provider <RPC> --layer-swagger <LAYER_API> --layer-rpc <LAYER_RPC> \
+  --sleep-time 900 --fixed-interval
+```
+
+### Price Service
+Run a shared HTTP price-service that batches/caches external provider calls (CoinGecko, CoinMarketCap, CoinPaprika, Coinbase, Curve price API):
+```bash
+# defaults to configs/price-service.toml
+relayer price-service
+
+# or explicit
+PRICE_SERVICE_CONFIG=configs/price-service.toml ./venv/bin/python -m src.cli price-service --host 0.0.0.0 --port 8787
+```
+
+Endpoints:
+- GET /price?feed=eth-usd[&agg=median&required=1]
+- GET /batch?feeds=eth-usd,btc-usd[&agg=trimmed_mean:0.1]
+
+### Config System (TOML)
+Configs live under `configs/`, support inheritance via `extends`, and provide both environment variables (`[env]`) and per-command defaults (`[commands.<name>]`). Example:
+```toml
+extends = ["saga-shared"]
+
+[env]
+FEED_NAME = "eth-usd"
+PRICE_SERVICE_URL = "http://127.0.0.1:8787"
+
+[commands.relay-threshold]
+query_string = "SpotPrice(eth,usd)"
+price_threshold = 0.01
+```
+
+Per-network shared configs: `saga-shared.toml`, `sepolia-shared.toml`. Feed configs: `configs/<network>/<feed>.toml` (templates included for ETH/BTC/USDC/USDT/TBTC/wstETH/rETH/stATOM).
+
+When using configs:
+```bash
+./venv/bin/python -m src.cli --config saga/eth-usd relay-threshold --eth-private-key 0x...
+```
+
+### Help
 ```bash
 relayer --help
 relayer relay --help
 relayer relay-threshold --help
+relayer relay-bridge --help
+relayer relay-valset --help
 ```

@@ -1,0 +1,12 @@
+extends = ["saga-shared"]
+
+[env]
+FEED_NAME = "statom-usd"
+PRICE_SERVICE_URL = "http://127.0.0.1:8787"
+
+[commands.relay-threshold]
+query_string = "SpotPrice(statom,usd)"
+price_threshold = 0.02
+offset = 0
+
+

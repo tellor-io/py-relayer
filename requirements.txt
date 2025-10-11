@@ -46,6 +46,7 @@ pyunormalize==15.1.0
 referencing==0.35.1
 regex==2024.5.15
 requests==2.32.3
+Flask==3.0.3
 rlp==4.0.1
 rpds-py==0.19.1
 six==1.16.0

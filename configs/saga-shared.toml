@@ -1,0 +1,34 @@
+# Shared configuration for all saga feeds
+[env]
+DATA_BRIDGE_ADDRESS = "0x01694d2C99415b736285a6f334248330c2BCdA35"  # data bridge saga
+LAYER_USER_ADDRESS = "0x6f250229af8D83c51500f3565b10E93d8907B644"   # TellorDataBank saga
+
+# Chain endpoints
+LAYER_SWAGGER_ENDPOINT = "https://mainnet.tellorlayer.com"
+LAYER_RPC_ENDPOINT = "https://mainnet.tellorlayer.com/rpc"
+WEB3_PROVIDER_URL = "https://sagaevm.jsonrpc.sagarpc.io"
+
+# CoinGecko API base configuration
+COINGECKO_BASE_URL = "https://api.coingecko.com/api/v3/simple/price"
+PRICE_CURRENCY = "usd"
+
+# Contract type (always TellorDataBank for threshold relayer)
+CONTRACT_TYPE = "TellorDataBank"
+
+[commands.relay-threshold]
+# Common relayer settings
+sleep_time = 14400              # 4 hour heartbeat
+check_interval = 600
+optimistic_delay = 43200        # 12 hours
+max_attestation_age = 600       # 10 minutes
+max_data_age = 86400           # 24 hours
+min_stake_percentage = 33
+price_threshold = 0.01         # 1% default threshold
+offset = 0
+
+# Use env vars for addresses and endpoints
+data_bridge_address = "0x01694d2C99415b736285a6f334248330c2BCdA35"
+layer_user_address = "0x6f250229af8D83c51500f3565b10E93d8907B644"
+web3_provider = "https://sagaevm.jsonrpc.sagarpc.io"
+layer_swagger = "https://mainnet.tellorlayer.com"
+layer_rpc = "https://mainnet.tellorlayer.com/rpc"

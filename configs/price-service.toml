@@ -1,0 +1,100 @@
+[server]
+host = "127.0.0.1"
+port = 8787
+cache_ttl_secs = 10
+
+[providers.coingecko]
+enabled = true
+base_url = "https://api.coingecko.com/api/v3/simple/price"
+rpm = 50
+
+[providers.coinmarketcap]
+enabled = false
+base_url = "https://pro-api.coinmarketcap.com/v2/cryptocurrency/quotes/latest"
+api_key = "${CMC_API_KEY}"
+rpm = 30
+
+[providers.coinpaprika]
+enabled = true
+base_url = "https://api.coinpaprika.com/v1"
+rpm = 30
+
+[providers.coinbase]
+enabled = true
+base_url = "https://api.coinbase.com/v2"
+rpm = 60
+
+[providers.curve]
+enabled = true
+base_url = "https://prices.curve.fi/v1/usd_price/ethereum"
+rpm = 60
+
+[[feeds]]
+name = "eth-usd"
+quote = "usd"
+coingecko_id = "ethereum"
+coinmarketcap_symbol = "ETH"
+coinpaprika_id = "eth-ethereum"
+coinbase_pair = "ETH-USD"
+
+[[feeds]]
+name = "btc-usd"
+quote = "usd"
+coingecko_id = "bitcoin"
+coinmarketcap_symbol = "BTC"
+coinpaprika_id = "btc-bitcoin"
+coinbase_pair = "BTC-USD"
+
+[[feeds]]
+name = "usdc-usd"
+quote = "usd"
+coingecko_id = "usd-coin"
+coinmarketcap_symbol = "USDC"
+coinpaprika_id = "usdc-usd-coin"
+coinbase_pair = "USDC-USD"
+
+[[feeds]]
+name = "usdt-usd"
+quote = "usd"
+coingecko_id = "tether"
+coinmarketcap_symbol = "USDT"
+coinpaprika_id = "usdt-tether"
+coinbase_pair = "USDT-USD"
+
+[[feeds]]
+name = "saga-usd"
+quote = "usd"
+coingecko_id = "saga"
+coinmarketcap_symbol = "SAGA"
+coinpaprika_id = "saga-saga"
+
+[[feeds]]
+name = "tbtc-usd"
+quote = "usd"
+coingecko_id = "tbtc"
+coinmarketcap_symbol = "TBTC"
+coinpaprika_id = "tbtc-tbtc"
+coinbase_pair = "TBTC-USD"
+
+[[feeds]]
+name = "wsteth-usd"
+quote = "usd"
+coingecko_id = "wrapped-steth"
+coinmarketcap_symbol = "WSTETH"
+coinpaprika_id = "wsteth-wrapped-steth"
+
+[[feeds]]
+name = "reth-usd"
+quote = "usd"
+coingecko_id = "rocket-pool-eth"
+coinmarketcap_symbol = "RETH"
+coinpaprika_id = "reth-rocket-pool-eth"
+
+[[feeds]]
+name = "statom-usd"
+quote = "usd"
+coingecko_id = "stride-staked-atom"
+coinmarketcap_symbol = "STATOM"
+coinpaprika_id = "statom-stride-staked-atom"
+
+
