@@ -6,6 +6,7 @@ import time
 import random
 from src.contract_adapters import get_contract_adapter
 from src.logger_utils import get_logger
+from src.evm_rpc import EvmRpcResolver
 
 logger = get_logger(__name__)
 
@@ -106,6 +107,8 @@ class EVMClient:
         self.layer_user_contract = None
         self.token_bridge_contract = None
         # self.layer_test_user_contract = None
+        self._evm_resolver = None
+        self._evm_network = None
 
     def wait_for_transaction_receipt_and_log(self, tx_hash, operation_name, timeout=300):
         """
@@ -114,6 +117,7 @@ class EVMClient:
         """
         try:
             logger.info(f"Waiting for {operation_name} transaction receipt: {tx_hash.hex()}")
+            self._refresh_web3_if_needed()
             receipt = self.web3_instance.eth.wait_for_transaction_receipt(tx_hash, timeout=timeout)
             
             if receipt.status == 1:
@@ -130,9 +134,17 @@ class EVMClient:
     def init_web3(self):
         provider_url = os.getenv("WEB3_PROVIDER_URL")
         private_key = os.getenv("ETH_PRIVATE_KEY")
+        evm_network = os.getenv("EVM_NETWORK")
         
-        # setup provider
-        self.web3_instance = Web3(Web3.HTTPProvider(provider_url))
+        # setup provider (direct URL) or via resolver (network)
+        if provider_url:
+            self.web3_instance = Web3(Web3.HTTPProvider(provider_url))
+        elif evm_network:
+            self._evm_network = evm_network
+            self._evm_resolver = EvmRpcResolver(os.environ.get("EVM_NETWORKS_CONFIG"))
+            self.web3_instance = self._evm_resolver.get_web3(evm_network)
+        else:
+            raise Exception("Must set WEB3_PROVIDER_URL or EVM_NETWORK")
         # set private key
         self.web3_instance.eth.account.enable_unaudited_hdwallet_features()
         self.web3_acct = Account.from_key(private_key)
@@ -143,58 +155,75 @@ class EVMClient:
         logger.info(f"Using address: {self.web3_instance.eth.defaultAccount}")
         logger.info(f"Current block number: {self.web3_instance.eth.block_number}")
 
+    def _refresh_web3_if_needed(self):
+        if self._evm_resolver and self._evm_network:
+            try:
+                self.web3_instance = self._evm_resolver.get_web3(self._evm_network)
+            except Exception:
+                # keep existing instance; send will fail and upstream logic will handle
+                pass
+
     def setup_data_bridge_contract(self):
-        data_bridge_address = os.getenv("DATA_BRIDGE_CONTRACT_ADDRESS")
+        self._refresh_web3_if_needed()
+        data_bridge_address = os.getenv("DATA_BRIDGE_ADDRESS")
         with open("abis/TellorDataBridgeTestnet.json") as f:
             abi = json.load(f)["abi"]
         self.data_bridge_contract = self.web3_instance.eth.contract(address=data_bridge_address, abi=abi)
         logger.info(f"Data bridge contract: {self.data_bridge_contract.address}")
 
     def setup_layer_user_contract(self):
-        layer_user_address = os.getenv("LAYER_USER_CONTRACT_ADDRESS")
+        self._refresh_web3_if_needed()
+        layer_user_address = os.getenv("LAYER_USER_ADDRESS")
         with open("abis/SimpleLayerUser.json") as f:
             abi = json.load(f)["abi"]
         self.layer_user_contract = self.web3_instance.eth.contract(address=layer_user_address, abi=abi)
         logger.info(f"Layer user contract: {self.layer_user_contract.address}")
 
     def setup_token_bridge_contract(self):
-        token_bridge_address = os.getenv("TOKEN_BRIDGE_CONTRACT_ADDRESS")
+        self._refresh_web3_if_needed()
+        token_bridge_address = os.getenv("TOKEN_BRIDGE_ADDRESS")
         with open("abis/TokenBridge.json") as f:
             abi = json.load(f)["abi"]
         self.token_bridge_contract = self.web3_instance.eth.contract(address=token_bridge_address, abi=abi)
         logger.info(f"Token bridge contract: {self.token_bridge_contract.address}")
 
     def setup_layer_test_user_contract(self):
-        layer_user_address = os.getenv("LAYER_USER_CONTRACT_ADDRESS")
+        self._refresh_web3_if_needed()
+        layer_user_address = os.getenv("LAYER_USER_ADDRESS")
         with open("abis/TestPriceFeedUser.json") as f:
             abi = json.load(f)["abi"]
         self.layer_user_contract = self.web3_instance.eth.contract(address=layer_user_address, abi=abi)
         logger.info(f"Layer user contract: {self.layer_user_contract.address}")
 
     def setup_yolo_tellor_user_contract(self):
-        layer_user_address = os.getenv("LAYER_USER_CONTRACT_ADDRESS")
+        self._refresh_web3_if_needed()
+        layer_user_address = os.getenv("LAYER_USER_ADDRESS")
         with open("abis/YoloTellorUser.json") as f:
             abi = json.load(f)["abi"]
         self.layer_user_contract = self.web3_instance.eth.contract(address=layer_user_address, abi=abi)
         logger.info(f"Layer user contract: {self.layer_user_contract.address}")
 
     def setup_tellor_data_bank_contract(self):
-        layer_user_address = os.getenv("LAYER_USER_CONTRACT_ADDRESS")
+        self._refresh_web3_if_needed()
+        layer_user_address = os.getenv("LAYER_USER_ADDRESS")
         with open("abis/TellorDataBank.json") as f:
             abi = json.load(f)["abi"]
         self.layer_user_contract = self.web3_instance.eth.contract(address=layer_user_address, abi=abi)
         logger.info(f"Tellor data bank contract: {self.layer_user_contract.address}")
 
     def get_web3_instance(self):
+        self._refresh_web3_if_needed()
         return self.web3_instance
 
     def get_data_bridge_validator_timestamp(self):
         if not self.data_bridge_contract:
             raise Exception("Data bridge contract not initialized")
+        self._refresh_web3_if_needed()
         return self.data_bridge_contract.functions.validatorTimestamp().call()
 
     def get_current_price_data_timestamp(self):
         logger.info("Getting current price data...")
+        self._refresh_web3_if_needed()
         value_count = self.layer_user_contract.functions.getValueCount().call()
         if value_count == 0:
             return 0
@@ -206,6 +235,7 @@ class EVMClient:
         logger.info("Initializing Data bridge...")
         logger.info(f"Init tx params: {init_tx_params}")
         try:
+            self._refresh_web3_if_needed()
             # Build the transaction
             tx = self.data_bridge_contract.functions.init(
                 init_tx_params["power_threshold"], 
@@ -241,6 +271,7 @@ class EVMClient:
  
     def read_deployer_address(self):
         logger.info("Reading deployer address...")
+        self._refresh_web3_if_needed()
         deployer_address = self.data_bridge_contract.functions.deployer().call()
         logger.info(f"Deployer address: {deployer_address}")
         return deployer_address
@@ -253,6 +284,7 @@ class EVMClient:
         logger.info("Updating validator set...")
         logger.info(f"Update tx params: {update_tx_params}")
         try:
+            self._refresh_web3_if_needed()
             contract_function = self.data_bridge_contract.functions.updateValidatorSet(
                 update_tx_params["new_validator_set_hash"],
                 update_tx_params["new_power_threshold"],
@@ -297,9 +329,10 @@ class EVMClient:
         Returns (tx_hash: str, error: Exception)
         """
         try:
-            contract_address = os.getenv("LAYER_USER_CONTRACT_ADDRESS")
+            self._refresh_web3_if_needed()
+            contract_address = os.getenv("LAYER_USER_ADDRESS")
             if not contract_address:
-                return None, Exception("LAYER_USER_CONTRACT_ADDRESS not set")
+                return None, Exception("LAYER_USER_ADDRESS not set")
             
             # Get the appropriate contract based on type
             if contract_type == "SimpleLayerUser":
@@ -368,6 +401,7 @@ class EVMClient:
         logger.info("Resetting Data bridge...")
         logger.info(f"Reset tx params: {reset_tx_params}")
         try:
+            self._refresh_web3_if_needed()
             tx = self.data_bridge_contract.functions.guardianResetValidatorSet(
                 reset_tx_params["power_threshold"],
                 reset_tx_params["validator_timestamp"],
@@ -397,6 +431,7 @@ class EVMClient:
         logger.info("Resetting Data bridge...")
         logger.info(f"Reset tx params: {reset_tx_params}")
         try:
+            self._refresh_web3_if_needed()
             tx = self.data_bridge_contract.functions.guardianResetValidatorSetTestnet(
                 reset_tx_params["power_threshold"],
                 reset_tx_params["validator_timestamp"],
@@ -426,6 +461,7 @@ class EVMClient:
         if not self.token_bridge_contract:
             raise Exception("Token bridge contract not initialized")
         try:
+            self._refresh_web3_if_needed()
             tx = self.token_bridge_contract.functions.withdrawFromLayer(
                 params['oracle_attestation_data'],
                 params['current_validator_set'],
@@ -454,6 +490,7 @@ class EVMClient:
     def get_withdraw_claimed_status(self, withdraw_id: int) -> bool:
         if not self.token_bridge_contract:
             raise Exception("Token bridge contract not initialized")
+        self._refresh_web3_if_needed()
         return self.token_bridge_contract.functions.withdrawClaimed(withdraw_id).call()
 
     def get_last_relayed_data(self, contract_type="TellorDataBank") -> tuple[dict, Exception]:
@@ -475,6 +512,7 @@ class EVMClient:
         if not adapter or not adapter_can_read_data(adapter):
             return None, Exception(f"Contract type {contract_type} does not support reading data")
         
+        self._refresh_web3_if_needed()
         query_id = os.getenv("QUERY_ID")
         raw_data = adapter.get_last_relayed_data(self.layer_user_contract, query_id).call()
         return adapter.decode_last_relayed_data(raw_data), None

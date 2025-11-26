@@ -436,7 +436,7 @@ class ThresholdRelayer:
         
         try:
             # submit tip
-            tip(query_data, os.getenv("LAYER_ADDRESS"), 
+            tip(query_data, os.getenv("LAYER_TX_CREATOR_ADDRESS"), 
                 os.getenv("LAYER_RPC_ENDPOINT"), self.layer_chain_id)
             
             logger.info("Tip submitted, waiting for new data...")
@@ -455,8 +455,8 @@ class ThresholdRelayer:
                     query_id = os.getenv("QUERY_ID")
                     latest_agg_report, e = self.get_latest_agg_report(query_id)
                     if e is None and latest_agg_report:
-                        report_ts = int(latest_agg_report.get("timestamp", 0)) // 1000
-                        if report_ts > ts_before_tip:
+                        report_ts = int(latest_agg_report.get("timestamp", 0))
+                        if report_ts > (ts_before_tip * 1000):
                             logger.info(f"New data received after tip - report timestamp: {report_ts}")
                             break
                 except Exception as e:

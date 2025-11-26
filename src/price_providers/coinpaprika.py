@@ -2,6 +2,7 @@ from typing import Dict, List, Tuple
 import requests
 
 from src.price_providers.base import PriceProvider
+from src.logger_utils import get_logger
 
 
 class CoinPaprikaProvider(PriceProvider):
@@ -13,6 +14,7 @@ class CoinPaprikaProvider(PriceProvider):
         self.timeout = timeout
 
     def batch_fetch(self, ids: List[str], quote: str) -> Tuple[Dict[str, float], Exception]:
+        logger = get_logger(__name__)
         if not ids:
             return {}, None
         out: Dict[str, float] = {}
@@ -25,9 +27,11 @@ class CoinPaprikaProvider(PriceProvider):
             params = {"quotes": quote.upper()}
             try:
                 resp = requests.get(url, params=params, timeout=self.timeout)
+                logger.debug(f"coinpaprika GET {resp.url} status={resp.status_code}")
                 if resp.status_code != 200:
                     continue
                 data = resp.json()
+                logger.debug(f"coinpaprika body={data}")
                 price = (((data or {}).get("quotes") or {}).get(quote.upper()) or {}).get("price")
                 if price is not None:
                     try:

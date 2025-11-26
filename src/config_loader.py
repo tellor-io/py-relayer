@@ -117,7 +117,16 @@ def load_config(config_ref: Optional[str]) -> Dict[str, Any]:
         cfg["env"] = {}
     if "commands" not in cfg:
         cfg["commands"] = {}
-    return cfg
+    # Deeply interpolate ${VAR} in all string values for convenience
+    def _deep_interpolate(obj: Any) -> Any:
+        if isinstance(obj, dict):
+            return {k: _deep_interpolate(v) for k, v in obj.items()}
+        if isinstance(obj, list):
+            return [_deep_interpolate(x) for x in obj]
+        if isinstance(obj, str):
+            return os.path.expandvars(obj)
+        return obj
+    return _deep_interpolate(cfg)
 
 
 def apply_env(cfg: Dict[str, Any]) -> None:

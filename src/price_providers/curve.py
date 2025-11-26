@@ -2,6 +2,7 @@ from typing import Dict, List, Tuple
 import requests
 
 from src.price_providers.base import PriceProvider
+from src.logger_utils import get_logger
 
 
 class CurvePriceApiProvider(PriceProvider):
@@ -13,6 +14,7 @@ class CurvePriceApiProvider(PriceProvider):
         self.timeout = timeout
 
     def batch_fetch(self, addresses: List[str], quote: str) -> Tuple[Dict[str, float], Exception]:
+        logger = get_logger(__name__)
         # Curve API is per-address; no batch endpoint
         if not addresses:
             return {}, None
@@ -23,9 +25,11 @@ class CurvePriceApiProvider(PriceProvider):
             url = f"{self.base_url}/{addr}"
             try:
                 resp = requests.get(url, timeout=self.timeout)
+                logger.debug(f"curve GET {resp.url} status={resp.status_code}")
                 if resp.status_code != 200:
                     continue
                 data = resp.json()
+                logger.debug(f"curve body={data}")
                 price = ((data or {}).get("data") or {}).get("usd_price")
                 if price is not None:
                     try:

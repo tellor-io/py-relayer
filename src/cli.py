@@ -119,16 +119,17 @@ def cli(ctx, verbose, no_color, config):
 @click.option('--sleep-time', envvar='SLEEP_TIME', type=int, default=600, help='Sleep time between relays in seconds')
 @click.option('--fixed-interval', is_flag=True, help='Use fixed interval timing instead of fixed sleep duration')
 @click.option('--eth-private-key', envvar='ETH_PRIVATE_KEY', required=True, help='Ethereum private key')
-@click.option('--data-bridge-address', envvar='DATA_BRIDGE_CONTRACT_ADDRESS', required=True, help='Tellor data bridge contract address')
-@click.option('--layer-user-address', envvar='LAYER_USER_CONTRACT_ADDRESS', required=True, help='Layer user contract address')
-@click.option('--web3-provider', envvar='WEB3_PROVIDER_URL', required=True, help='Web3 provider URL')
+@click.option('--data-bridge-address', envvar='DATA_BRIDGE_ADDRESS', required=True, help='Tellor data bridge contract address')
+@click.option('--layer-user-address', envvar='LAYER_USER_ADDRESS', required=True, help='Layer user contract address')
+@click.option('--web3-provider', envvar='WEB3_PROVIDER_URL', help='Web3 provider URL (overrides --evm-network)')
+@click.option('--evm-network', envvar='EVM_NETWORK', help='EVM network name from evm-networks config (used if --web3-provider not set)')
 @click.option('--layer-swagger', envvar='LAYER_SWAGGER_ENDPOINT', required=True, help='Layer swagger endpoint')
 @click.option('--layer-rpc', envvar='LAYER_RPC_ENDPOINT', required=True, help='Layer RPC endpoint')
 @click.option('--contract-type', type=click.Choice(['SimpleLayerUser', 'TestPriceFeedUser', 'YoloTellorUser', 'TellorDataBank']), 
               default='SimpleLayerUser', help='Type of contract to use for relaying')
-@click.option('--layer-tx-creator-address', envvar='LAYER_ADDRESS', required=True, help='Local keyring address used for creating transactions on layer')
+@click.option('--layer-tx-creator-address', envvar='LAYER_TX_CREATOR_ADDRESS', required=True, help='Local keyring address used for creating transactions on layer')
 @click.option('--just-print', is_flag=True, help='Just print the oracle data parameters without submitting transaction')
-def relay(query_id, query_string, sleep_time, fixed_interval, eth_private_key, web3_provider, layer_swagger, layer_rpc, 
+def relay(query_id, query_string, sleep_time, fixed_interval, eth_private_key, web3_provider, evm_network, layer_swagger, layer_rpc, 
           data_bridge_address, layer_user_address, contract_type, just_print, layer_tx_creator_address, verbose, no_color):
     """Start the relayer process"""
     configure_logging(verbose=verbose, no_color=no_color)
@@ -143,11 +144,14 @@ def relay(query_id, query_string, sleep_time, fixed_interval, eth_private_key, w
     
     # Set environment variables
     os.environ['ETH_PRIVATE_KEY'] = to_checksum_address(eth_private_key)
-    os.environ['WEB3_PROVIDER_URL'] = web3_provider
+    if web3_provider:
+        os.environ['WEB3_PROVIDER_URL'] = web3_provider
+    elif evm_network:
+        os.environ['EVM_NETWORK'] = evm_network
     os.environ['LAYER_SWAGGER_ENDPOINT'] = layer_swagger
     os.environ['LAYER_RPC_ENDPOINT'] = layer_rpc
-    os.environ['DATA_BRIDGE_CONTRACT_ADDRESS'] = to_checksum_address(data_bridge_address)
-    os.environ['LAYER_USER_CONTRACT_ADDRESS'] = to_checksum_address(layer_user_address)
+    os.environ['DATA_BRIDGE_ADDRESS'] = to_checksum_address(data_bridge_address)
+    os.environ['LAYER_USER_ADDRESS'] = to_checksum_address(layer_user_address)
     os.environ['QUERY_ID'] = final_query_id
     if final_query_data:
         os.environ['QUERY_DATA'] = final_query_data
@@ -156,7 +160,7 @@ def relay(query_id, query_string, sleep_time, fixed_interval, eth_private_key, w
     os.environ['CONTRACT_TYPE'] = contract_type
     os.environ['JUST_PRINT'] = str(just_print)
     os.environ['FIXED_INTERVAL'] = str(fixed_interval)
-    os.environ['LAYER_ADDRESS'] = to_checksum_address(layer_tx_creator_address)
+    os.environ['LAYER_TX_CREATOR_ADDRESS'] = to_checksum_address(layer_tx_creator_address)
     try:
         start_relayer()
     except KeyboardInterrupt:
@@ -169,16 +173,20 @@ def relay(query_id, query_string, sleep_time, fixed_interval, eth_private_key, w
 @cli.command()
 @add_logging_options
 @click.option('--eth-private-key', envvar='ETH_PRIVATE_KEY', required=True, help='Ethereum private key')
-@click.option('--data-bridge-address', envvar='DATA_BRIDGE_CONTRACT_ADDRESS', required=True, help='Tellor data bridge contract address')
-@click.option('--web3-provider', envvar='WEB3_PROVIDER_URL', required=True, help='Web3 provider URL')
+@click.option('--data-bridge-address', envvar='DATA_BRIDGE_ADDRESS', required=True, help='Tellor data bridge contract address')
+@click.option('--web3-provider', envvar='WEB3_PROVIDER_URL', help='Web3 provider URL (overrides --evm-network)')
+@click.option('--evm-network', envvar='EVM_NETWORK', help='EVM network name from evm-networks config (used if --web3-provider not set)')
 @click.option('--layer-swagger', envvar='LAYER_SWAGGER_ENDPOINT', required=True, help='Layer swagger endpoint')
-def init(eth_private_key, data_bridge_address, web3_provider, layer_swagger, verbose, no_color):
+def init(eth_private_key, data_bridge_address, web3_provider, evm_network, layer_swagger, verbose, no_color):
     """Initialize Tellor data bridge contract"""
     configure_logging(verbose=verbose, no_color=no_color)
 
     os.environ['ETH_PRIVATE_KEY'] = eth_private_key
-    os.environ['DATA_BRIDGE_CONTRACT_ADDRESS'] = data_bridge_address
-    os.environ['WEB3_PROVIDER_URL'] = web3_provider
+    os.environ['DATA_BRIDGE_ADDRESS'] = data_bridge_address
+    if web3_provider:
+        os.environ['WEB3_PROVIDER_URL'] = web3_provider
+    elif evm_network:
+        os.environ['EVM_NETWORK'] = evm_network
     os.environ['LAYER_SWAGGER_ENDPOINT'] = layer_swagger
     
     try:
@@ -196,17 +204,21 @@ def init(eth_private_key, data_bridge_address, web3_provider, layer_swagger, ver
 @cli.command()
 @add_logging_options
 @click.option('--eth-private-key', envvar='ETH_PRIVATE_KEY', required=True, help='Ethereum private key')
-@click.option('--data-bridge-address', envvar='DATA_BRIDGE_CONTRACT_ADDRESS', required=True, help='Tellor data bridge contract address')
-@click.option('--web3-provider', envvar='WEB3_PROVIDER_URL', required=True, help='Web3 provider URL')
+@click.option('--data-bridge-address', envvar='DATA_BRIDGE_ADDRESS', required=True, help='Tellor data bridge contract address')
+@click.option('--web3-provider', envvar='WEB3_PROVIDER_URL', help='Web3 provider URL (overrides --evm-network)')
+@click.option('--evm-network', envvar='EVM_NETWORK', help='EVM network name from evm-networks config (used if --web3-provider not set)')
 @click.option('--layer-swagger', envvar='LAYER_SWAGGER_ENDPOINT', required=True, help='Layer swagger endpoint')
 @click.option('--just-print', is_flag=True, help='Just print the reset parameters without submitting transaction')
-def reset(eth_private_key, data_bridge_address, web3_provider, layer_swagger, just_print, verbose, no_color):
+def reset(eth_private_key, data_bridge_address, web3_provider, evm_network, layer_swagger, just_print, verbose, no_color):
     """Reset Tellor data bridge contract"""
     configure_logging(verbose=verbose, no_color=no_color)
 
     os.environ['ETH_PRIVATE_KEY'] = to_checksum_address(eth_private_key)
-    os.environ['DATA_BRIDGE_CONTRACT_ADDRESS'] = to_checksum_address(data_bridge_address)
-    os.environ['WEB3_PROVIDER_URL'] = web3_provider
+    os.environ['DATA_BRIDGE_ADDRESS'] = to_checksum_address(data_bridge_address)
+    if web3_provider:
+        os.environ['WEB3_PROVIDER_URL'] = web3_provider
+    elif evm_network:
+        os.environ['EVM_NETWORK'] = evm_network
     os.environ['LAYER_SWAGGER_ENDPOINT'] = layer_swagger
     os.environ['JUST_PRINT'] = str(just_print)
     
@@ -254,22 +266,26 @@ def update(query_id, query_string, contract_type, verbose, no_color):
 @add_logging_options
 @click.option('--withdraw-id', required=True, type=int, help='Withdraw ID to relay')
 @click.option('--eth-private-key', envvar='ETH_PRIVATE_KEY', required=True, help='Ethereum private key')
-@click.option('--web3-provider', envvar='WEB3_PROVIDER_URL', required=True, help='Web3 provider URL')
+@click.option('--web3-provider', envvar='WEB3_PROVIDER_URL', help='Web3 provider URL (overrides --evm-network)')
+@click.option('--evm-network', envvar='EVM_NETWORK', help='EVM network name from evm-networks config (used if --web3-provider not set)')
 @click.option('--layer-swagger', envvar='LAYER_SWAGGER_ENDPOINT', required=True, help='Layer swagger endpoint')
 @click.option('--layer-rpc', envvar='LAYER_RPC_ENDPOINT', required=True, help='Layer RPC endpoint')
-@click.option('--data-bridge-address', envvar='DATA_BRIDGE_CONTRACT_ADDRESS', required=True, help='Tellor data bridge contract address')
-@click.option('--token-bridge-address', envvar='TOKEN_BRIDGE_CONTRACT_ADDRESS', required=True, help='Token Bridge contract address')
-@click.option('--layer-tx-creator-address', envvar='LAYER_ADDRESS', required=True, help='Local keyring address used for creating transactions on layer')
-def relay_bridge(withdraw_id, eth_private_key, web3_provider, layer_swagger, layer_rpc, data_bridge_address, token_bridge_address, layer_tx_creator_address, verbose, no_color):
+@click.option('--data-bridge-address', envvar='DATA_BRIDGE_ADDRESS', required=True, help='Tellor data bridge contract address')
+@click.option('--token-bridge-address', envvar='TOKEN_BRIDGE_ADDRESS', required=True, help='Token Bridge contract address')
+@click.option('--layer-tx-creator-address', envvar='LAYER_TX_CREATOR_ADDRESS', required=True, help='Local keyring address used for creating transactions on layer')
+def relay_bridge(withdraw_id, eth_private_key, web3_provider, evm_network, layer_swagger, layer_rpc, data_bridge_address, token_bridge_address, layer_tx_creator_address, verbose, no_color):
     """Relay a specific withdraw from Layer to EVM chain"""
     configure_logging(verbose=verbose, no_color=no_color)
     os.environ['ETH_PRIVATE_KEY'] = to_checksum_address(eth_private_key)
-    os.environ['WEB3_PROVIDER_URL'] = web3_provider
+    if web3_provider:
+        os.environ['WEB3_PROVIDER_URL'] = web3_provider
+    elif evm_network:
+        os.environ['EVM_NETWORK'] = evm_network
     os.environ['LAYER_SWAGGER_ENDPOINT'] = layer_swagger
     os.environ['LAYER_RPC_ENDPOINT'] = layer_rpc
-    os.environ['DATA_BRIDGE_CONTRACT_ADDRESS'] = to_checksum_address(data_bridge_address)
-    os.environ['TOKEN_BRIDGE_CONTRACT_ADDRESS'] = to_checksum_address(token_bridge_address)
-    os.environ['LAYER_ADDRESS'] = layer_tx_creator_address
+    os.environ['DATA_BRIDGE_ADDRESS'] = to_checksum_address(data_bridge_address)
+    os.environ['TOKEN_BRIDGE_ADDRESS'] = to_checksum_address(token_bridge_address)
+    os.environ['LAYER_TX_CREATOR_ADDRESS'] = layer_tx_creator_address
 
     _, error = relay_withdraw(withdraw_id)
     if error:
@@ -326,20 +342,24 @@ def report(input_file, terminal_plot, micro, assume_all, verbose, no_color):
 @click.option('--sleep-time', envvar='SLEEP_TIME', type=int, default=600, help='Sleep time between relays in seconds')
 @click.option('--fixed-interval', is_flag=True, help='Use fixed interval timing instead of fixed sleep duration')
 @click.option('--eth-private-key', envvar='ETH_PRIVATE_KEY', required=True, help='Ethereum private key')
-@click.option('--data-bridge-address', envvar='DATA_BRIDGE_CONTRACT_ADDRESS', required=True, help='Tellor data bridge contract address')
-@click.option('--web3-provider', envvar='WEB3_PROVIDER_URL', required=True, help='Web3 provider URL')
+@click.option('--data-bridge-address', envvar='DATA_BRIDGE_ADDRESS', required=True, help='Tellor data bridge contract address')
+@click.option('--web3-provider', envvar='WEB3_PROVIDER_URL', help='Web3 provider URL (overrides --evm-network)')
+@click.option('--evm-network', envvar='EVM_NETWORK', help='EVM network name from evm-networks config (used if --web3-provider not set)')
 @click.option('--layer-swagger', envvar='LAYER_SWAGGER_ENDPOINT', required=True, help='Layer swagger endpoint')
 @click.option('--layer-rpc', envvar='LAYER_RPC_ENDPOINT', required=True, help='Layer RPC endpoint')
-def relay_valset(sleep_time, fixed_interval, eth_private_key, web3_provider, layer_swagger, layer_rpc, 
+def relay_valset(sleep_time, fixed_interval, eth_private_key, web3_provider, evm_network, layer_swagger, layer_rpc, 
           data_bridge_address, verbose, no_color):
     """Start the valset relayer process"""
     configure_logging(verbose=verbose, no_color=no_color)
     # Set environment variables
     os.environ['ETH_PRIVATE_KEY'] = to_checksum_address(eth_private_key)
-    os.environ['WEB3_PROVIDER_URL'] = web3_provider
+    if web3_provider:
+        os.environ['WEB3_PROVIDER_URL'] = web3_provider
+    elif evm_network:
+        os.environ['EVM_NETWORK'] = evm_network
     os.environ['LAYER_SWAGGER_ENDPOINT'] = layer_swagger
     os.environ['LAYER_RPC_ENDPOINT'] = layer_rpc
-    os.environ['DATA_BRIDGE_CONTRACT_ADDRESS'] = to_checksum_address(data_bridge_address)
+    os.environ['DATA_BRIDGE_ADDRESS'] = to_checksum_address(data_bridge_address)
     os.environ['SLEEP_TIME'] = str(sleep_time)
     os.environ['FIXED_INTERVAL'] = str(fixed_interval)
     try:
@@ -361,12 +381,13 @@ def relay_valset(sleep_time, fixed_interval, eth_private_key, web3_provider, lay
 @click.option('--check-interval', envvar='CHECK_INTERVAL', type=int, default=300, help='Main loop interval in seconds')
 @click.option('--price-api-url', envvar='PRICE_API_URL', help='CoinGecko price API URL (optional, falls back to Layer chain)')
 @click.option('--eth-private-key', envvar='ETH_PRIVATE_KEY', required=True, help='Ethereum private key. Should use .env file for this.')
-@click.option('--data-bridge-address', envvar='DATA_BRIDGE_CONTRACT_ADDRESS', required=True, help='Tellor data bridge contract address')
-@click.option('--layer-user-address', envvar='LAYER_USER_CONTRACT_ADDRESS', required=True, help='TellorDataBank contract address')
-@click.option('--web3-provider', envvar='WEB3_PROVIDER_URL', required=True, help='Web3 provider URL')
+@click.option('--data-bridge-address', envvar='DATA_BRIDGE_ADDRESS', required=True, help='Tellor data bridge contract address')
+@click.option('--layer-user-address', envvar='LAYER_USER_ADDRESS', required=True, help='TellorDataBank contract address')
+@click.option('--web3-provider', envvar='WEB3_PROVIDER_URL', help='Web3 provider URL (overrides --evm-network)')
+@click.option('--evm-network', envvar='EVM_NETWORK', help='EVM network name from evm-networks config (used if --web3-provider not set)')
 @click.option('--layer-swagger', envvar='LAYER_SWAGGER_ENDPOINT', required=True, help='Layer swagger API endpoint')
 @click.option('--layer-rpc', envvar='LAYER_RPC_ENDPOINT', required=True, help='Layer RPC endpoint')
-@click.option('--layer-tx-creator-address', envvar='LAYER_ADDRESS', required=True, help='Local keyring address used for creating transactions on layer')
+@click.option('--layer-tx-creator-address', envvar='LAYER_TX_CREATOR_ADDRESS', required=True, help='Local keyring address used for creating transactions on layer')
 @click.option('--optimistic-delay', envvar='OPTIMISTIC_DELAY', type=int, default=43200, help='Optimistic delay in seconds')
 @click.option('--max-attestation-age', envvar='MAX_ATTESTATION_AGE', type=int, default=600, help='Max attestation age in seconds')
 @click.option('--max-data-age', envvar='MAX_DATA_AGE', type=int, default=86400, help='Max data age in seconds')
@@ -374,7 +395,7 @@ def relay_valset(sleep_time, fixed_interval, eth_private_key, web3_provider, lay
 @click.option('--offset', envvar='OFFSET', type=int, default=0, help='Offset in seconds for the next heartbeat time')
 @click.option('--backup', is_flag=True, help='Run the relayer in backup mode')
 def relay_threshold(query_id, query_data, query_string, sleep_time, price_threshold, check_interval, price_api_url, eth_private_key, 
-                    web3_provider, layer_swagger, layer_rpc, data_bridge_address, layer_user_address, 
+                    web3_provider, evm_network, layer_swagger, layer_rpc, data_bridge_address, layer_user_address, 
                     layer_tx_creator_address, optimistic_delay, max_attestation_age, max_data_age, 
                     min_stake_percentage, offset, backup, verbose, no_color):
     """Start the threshold relayer process (heartbeat + price threshold)"""
@@ -393,17 +414,20 @@ def relay_threshold(query_id, query_data, query_string, sleep_time, price_thresh
     
     # set environment variables
     os.environ['ETH_PRIVATE_KEY'] = to_checksum_address(eth_private_key)
-    os.environ['WEB3_PROVIDER_URL'] = web3_provider
+    if web3_provider:
+        os.environ['WEB3_PROVIDER_URL'] = web3_provider
+    elif evm_network:
+        os.environ['EVM_NETWORK'] = evm_network
     os.environ['LAYER_SWAGGER_ENDPOINT'] = layer_swagger
     os.environ['LAYER_RPC_ENDPOINT'] = layer_rpc
-    os.environ['DATA_BRIDGE_CONTRACT_ADDRESS'] = to_checksum_address(data_bridge_address)
-    os.environ['LAYER_USER_CONTRACT_ADDRESS'] = to_checksum_address(layer_user_address)
+    os.environ['DATA_BRIDGE_ADDRESS'] = to_checksum_address(data_bridge_address)
+    os.environ['LAYER_USER_ADDRESS'] = to_checksum_address(layer_user_address)
     os.environ['QUERY_ID'] = final_query_id
     os.environ['QUERY_DATA'] = final_query_data
     os.environ['SLEEP_TIME'] = str(sleep_time)
     os.environ['PRICE_THRESHOLD'] = str(price_threshold)
     os.environ['CHECK_INTERVAL'] = str(check_interval)
-    os.environ['LAYER_ADDRESS'] = to_checksum_address(layer_tx_creator_address)
+    os.environ['LAYER_TX_CREATOR_ADDRESS'] = to_checksum_address(layer_tx_creator_address)
     os.environ['OPTIMISTIC_DELAY'] = str(optimistic_delay)
     os.environ['MAX_ATTESTATION_AGE'] = str(max_attestation_age)
     os.environ['MAX_DATA_AGE'] = str(max_data_age)

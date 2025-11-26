@@ -1,13 +1,14 @@
 # Shared configuration for all sepolia feeds
 [env]
-DATA_BRIDGE_ADDRESS = "0x219255BcC07FA116A27b9303222A8003A0fEd394"  # data bridge saga
-LAYER_USER_ADDRESS = "0xF03B401966eF4c32e7Cef769c4BB2833BaC0eb9a"   # TellorDataBank saga
-LAYER_TX_CREATOR_ADDRESS = "tellor1heavygrqg2a3h4edlg0aznh6hyf6e9t9xfgufl"  # Your Layer address
+DATA_BRIDGE_ADDRESS = "0x219255BcC07FA116A27b9303222A8003A0fEd394"  # data bridge sepolia
+TOKEN_BRIDGE_ADDRESS = "0x62733e63499a25E35844c91275d4c3bdb159D29d"  # token bridge sepolia
+LAYER_USER_ADDRESS = "0xF03B401966eF4c32e7Cef769c4BB2833BaC0eb9a"   # TellorDataBank sepolia
+LAYER_TX_CREATOR_ADDRESS = "${LAYER_TX_CREATOR_ADDRESS_1}"  # Your Layer address
 
 # Chain endpoints
 LAYER_SWAGGER_ENDPOINT = "https://node-palmito.tellorlayer.com"
 LAYER_RPC_ENDPOINT = "https://node-palmito.tellorlayer.com/rpc"
-WEB3_PROVIDER_URL = "https://sepolia.infura.io/v3/3b11ec36debf45eb8ed2a0cc13bc26a9"
+EVM_NETWORK = "sepolia"
 
 # CoinGecko API base configuration
 COINGECKO_BASE_URL = "https://api.coingecko.com/api/v3/simple/price"
@@ -18,11 +19,8 @@ PRICE_SERVICE_URL = "http://127.0.0.1:8787"
 PRICE_AGGREGATION = "median"
 PRICE_SERVICE_CONFIG = "configs/price-service.toml"
 
-# Contract type (always TellorDataBank for threshold relayer)
-CONTRACT_TYPE = "TellorDataBank"
-
 [commands.relay-threshold]
-# Common relayer settings
+# threshold relayer settings
 sleep_time = 14400              # 4 hour heartbeat
 check_interval = 600
 optimistic_delay = 43200        # 12 hours
@@ -31,11 +29,3 @@ max_data_age = 86400           # 24 hours
 min_stake_percentage = 33
 price_threshold = 0.02         # 2% default threshold
 offset = 0
-
-# Use env vars for addresses and endpoints
-data_bridge_address = "0x219255BcC07FA116A27b9303222A8003A0fEd394"
-layer_user_address = "0xF03B401966eF4c32e7Cef769c4BB2833BaC0eb9a"
-web3_provider = "https://sepolia.infura.io/v3/3b11ec36debf45eb8ed2a0cc13bc26a9"
-layer_swagger = "https://node-palmito.tellorlayer.com"
-layer_rpc = "https://node-palmito.tellorlayer.com/rpc"
-layer_tx_creator_address = "tellor1heavygrqg2a3h4edlg0aznh6hyf6e9t9xfgufl"

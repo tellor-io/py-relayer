@@ -1,13 +1,14 @@
-# Shared configuration for all saga feeds
+# Shared configuration for all sepolia feeds
 [env]
-DATA_BRIDGE_ADDRESS = "0x01694d2C99415b736285a6f334248330c2BCdA35"  # data bridge saga
-LAYER_USER_ADDRESS = "0x6f250229af8D83c51500f3565b10E93d8907B644"   # TellorDataBank saga
+DATA_BRIDGE_ADDRESS = "0xFfa3393BE1E4b442fff6cD0df0794B0031e9CF65"  # data bridge ethereum mainnet
+TOKEN_BRIDGE_ADDRESS = "0x5589e306b1920F009979a50B88caE32aecD471E4"  # token bridge ethereum mainnet
+LAYER_USER_ADDRESS = " "   # TellorDataBank ethereum mainnet
 LAYER_TX_CREATOR_ADDRESS = "${LAYER_TX_CREATOR_ADDRESS_1}"  # Your Layer address
 
 # Chain endpoints
 LAYER_SWAGGER_ENDPOINT = "https://mainnet.tellorlayer.com"
 LAYER_RPC_ENDPOINT = "https://mainnet.tellorlayer.com/rpc"
-WEB3_PROVIDER_URL = "https://sagaevm.jsonrpc.sagarpc.io"
+EVM_NETWORK = "ethereum"
 
 # CoinGecko API base configuration
 COINGECKO_BASE_URL = "https://api.coingecko.com/api/v3/simple/price"
@@ -26,5 +27,5 @@ optimistic_delay = 43200        # 12 hours
 max_attestation_age = 600       # 10 minutes
 max_data_age = 86400           # 24 hours
 min_stake_percentage = 33
-price_threshold = 0.01         # 1% default threshold
+price_threshold = 0.02         # 2% default threshold
 offset = 0

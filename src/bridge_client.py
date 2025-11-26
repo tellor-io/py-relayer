@@ -13,7 +13,6 @@ logger = get_logger(__name__)
 
 withdraw_delay = 43200 # seconds
 max_attestation_age = 43200 # seconds
-withdraw_id_to_relay = int(os.getenv("WITHDRAW_ID", "0"))
 
 # things to check:
 # 	- withdrawal id __exists__
@@ -62,7 +61,7 @@ def relay_withdraw(withdraw_id) -> (int, Exception):
             return None, e
         chain_id = layer_status.get("result").get("node_info").get("network")
         # use the original timestamp string, not the converted float
-        e = request_attestations(withdraw_query_id, oracle_proof["attestation_data"]["timestamp"], os.getenv("LAYER_ADDRESS"), os.getenv("LAYER_RPC_ENDPOINT"), chain_id)
+        e = request_attestations(withdraw_query_id, oracle_proof["attestation_data"]["timestamp"], os.getenv("LAYER_TX_CREATOR_ADDRESS"), os.getenv("LAYER_RPC_ENDPOINT"), chain_id)
         # sleep for 5 seconds
         time.sleep(5)
         # get the new oracle proof

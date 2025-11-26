@@ -1,10 +1,10 @@
 extends = ["saga-shared"]
 
 [env]
-FEED_NAME = "saga-usd"
+FEED_NAME = "vyusd-usd"
 
 [commands.relay-threshold]
-query_string = "SpotPrice(saga,usd)"
+query_string = "SpotPrice(vyusd,usd)"
 price_threshold = 0.02
 offset = 0
 

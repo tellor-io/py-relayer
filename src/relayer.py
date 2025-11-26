@@ -44,7 +44,7 @@ def get_oracle_data(query_id):
 
 def get_oracle_data_optimized(query_id, optimistic_delay=900, max_attestation_age=600, max_data_age=14400, min_stake_percentage=33, last_relayed_timestamp=0) -> tuple[dict, Exception]:
     """
-    Gets oracle data based on SamplePriceFeedUser preferences
+    Gets oracle data based on TellorDataBank preferences
     
     Args:
         query_id: The query ID to get data for
@@ -76,7 +76,7 @@ def get_oracle_data_optimized(query_id, optimistic_delay=900, max_attestation_ag
         return None, Exception(f"No data found. {ADD_A_TIP}")
     
     # make sure the aggregate data is going forward in time
-    if last_relayed_timestamp > int(attest_data["timestamp"]):
+    if last_relayed_timestamp >= int(attest_data["timestamp"]):
         logger.debug(f"Latest report is >= last relayed timestamp. New data needed. Report timestamp: {attest_data['timestamp']} Last relayed timestamp: {last_relayed_timestamp}")
         return None, Exception(f"Latest report is >= last relayed timestamp. {ADD_A_TIP}")
 
@@ -139,7 +139,7 @@ def get_oracle_data_optimized(query_id, optimistic_delay=900, max_attestation_ag
         if e:
             return None, e
         chain_id = layer_status.get("result").get("node_info").get("network")
-        e = request_attestations(query_id, attest_data["timestamp"], os.getenv("LAYER_ADDRESS"), os.getenv("LAYER_RPC_ENDPOINT"), chain_id)
+        e = request_attestations(query_id, attest_data["timestamp"], os.getenv("LAYER_TX_CREATOR_ADDRESS"), os.getenv("LAYER_RPC_ENDPOINT"), chain_id)
         if e:
             return None, e
         sleep(3)
@@ -540,7 +540,7 @@ def get_oracle_proof_from_layer(query_id: str, timestamp: int) -> tuple[dict, Ex
     if e:
         return None, e
     
-    e = request_attestations(query_id, timestamp, os.getenv("LAYER_ADDRESS"), os.getenv("LAYER_RPC_ENDPOINT"), chain_id)
+    e = request_attestations(query_id, timestamp, os.getenv("LAYER_TX_CREATOR_ADDRESS"), os.getenv("LAYER_RPC_ENDPOINT"), chain_id)
     if e:
         return None, e
     sleep(5)

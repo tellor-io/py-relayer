@@ -27,12 +27,7 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-5. Install the package:
-```bash
-pip install -e .
-```
-
-6. Copy the .env.example file to .env and set the appropriate environment variables:
+5. Copy the .env.example file to .env and set the appropriate environment variables:
 ```bash
 cp .env.example .env
 ```
@@ -138,7 +133,7 @@ Per-network shared configs: `saga-shared.toml`, `sepolia-shared.toml`. Feed conf
 
 When using configs:
 ```bash
-./venv/bin/python -m src.cli --config saga/eth-usd relay-threshold --eth-private-key 0x...
+relayer --config saga/eth-usd relay-threshold --eth-private-key 0x...
 ```
 
 ### Help

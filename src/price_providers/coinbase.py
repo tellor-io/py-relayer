@@ -2,6 +2,7 @@ from typing import Dict, List, Tuple
 import requests
 
 from src.price_providers.base import PriceProvider
+from src.logger_utils import get_logger
 
 
 class CoinbaseProvider(PriceProvider):
@@ -13,6 +14,7 @@ class CoinbaseProvider(PriceProvider):
         self.timeout = timeout
 
     def batch_fetch(self, pairs: List[str], quote: str) -> Tuple[Dict[str, float], Exception]:
+        logger = get_logger(__name__)
         # pairs expected as COIN-USD, but service maps token->pair
         if not pairs:
             return {}, None
@@ -23,9 +25,11 @@ class CoinbaseProvider(PriceProvider):
             url = f"{self.base_url}/prices/{pair.upper()}/spot"
             try:
                 resp = requests.get(url, timeout=self.timeout)
+                logger.debug(f"coinbase GET {resp.url} status={resp.status_code}")
                 if resp.status_code != 200:
                     continue
                 data = resp.json()
+                logger.debug(f"coinbase body={data}")
                 amount = (((data or {}).get("data") or {}).get("amount"))
                 if amount is not None:
                     try:

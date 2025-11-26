@@ -79,7 +79,7 @@ rpm = 30
 name = "eth-usd"
 quote = "usd"
 coingecko_id = "ethereum"
-coinmarketcap_symbol = "ETH"
+coinmarketcap_id = "1027"
 ```
 
 ### Precedence

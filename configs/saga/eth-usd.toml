@@ -2,22 +2,9 @@ extends = ["saga-shared"]
 
 [env]
 FEED_NAME = "eth-usd"
-PRICE_SERVICE_URL = "http://127.0.0.1:8787"
 
 [commands.relay-threshold]
 query_string = "SpotPrice(eth,usd)"
 price_threshold = 0.01
 offset = 0
 
-# ETH/USD Price Feed Configuration for Saga
-extends = ["saga-shared"]
-
-[env]
-FEED_NAME = "ETH/USD"
-COINGECKO_ID = "ethereum"
-
-[commands.relay-threshold]
-query_string = "SpotPrice(eth,usd)"
-price_threshold = 0.02  # 1% threshold for ETH
-offset = 0
-price_api_url = "https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd"
