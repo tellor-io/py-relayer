@@ -2,7 +2,8 @@
 chain_id = 1
 rpcs = [
   "https://mainnet.infura.io/v3/${INFURA_API_KEY}",
-  "https://eth-mainnet.alchemyapi.io/v2/${ALCHEMY_API_KEY}"
+  "https://eth-mainnet.alchemyapi.io/v2/${ALCHEMY_API_KEY}",
+  "https://eth.drpc.org"
 ]
 reset_interval_secs = 3600
 health_timeout_ms = 3000
@@ -14,6 +15,7 @@ chain_id = 11155111
 rpcs = [
   "https://sepolia.infura.io/v3/${INFURA_API_KEY}",
   "https://eth-sepolia.alchemyapi.io/v2/${ALCHEMY_API_KEY}",
+  "https://sepolia.drpc.org"
 ]
 reset_interval_secs = 3600
 health_timeout_ms = 3000
@@ -24,6 +26,7 @@ chain_id = 8453
 rpcs = [
   "https://base-mainnet.infura.io/v3/${INFURA_API_KEY}",
   "https://base-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}",
+  "https://base.drpc.org"
 ]
 reset_interval_secs = 3600
 health_timeout_ms = 3000

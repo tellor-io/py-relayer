@@ -4,6 +4,7 @@ import os
 from dotenv import load_dotenv
 import time
 import random
+from typing import Callable, Optional, Tuple
 from src.contract_adapters import get_contract_adapter
 from src.logger_utils import get_logger
 from src.evm_rpc import EvmRpcResolver
@@ -34,8 +35,24 @@ def is_nonce_error(error) -> bool:
     
     return any(pattern in error_str for pattern in nonce_error_patterns)
 
-def send_transaction_with_retry(web3_instance, web3_acct, contract_function, base_tx_params, 
-                               max_retries=5, base_delay=1.0, max_delay=60.0, jitter=True):
+def is_rate_limit_error(error) -> bool:
+    """
+    Detect if an error is due to provider rate limiting.
+    """
+    error_str = str(error).lower()
+    return "429" in error_str or "too many requests" in error_str or "rate limit" in error_str
+
+def send_transaction_with_retry(
+    web3_instance,
+    web3_acct,
+    contract_function,
+    base_tx_params,
+    max_retries=5,
+    base_delay=1.0,
+    max_delay=60.0,
+    jitter=True,
+    refresh_web3_callback: Optional[Callable[[], Tuple]] = None,
+):
     """
     Send a transaction with exponential backoff retry logic for nonce conflicts.
     
@@ -77,23 +94,40 @@ def send_transaction_with_retry(web3_instance, web3_acct, contract_function, bas
             logger.warning(f"Transaction attempt {attempt + 1} failed: {e}")
             
             # Check if this is a nonce error that we should retry
-            if not is_nonce_error(e):
-                logger.error(f"Non-retryable error encountered: {e}")
-                return None, Exception(f"Transaction failed with non-retryable error: {e}")
-            
-            # If this was our last attempt, don't sleep
-            if attempt >= max_retries:
-                break
+            if is_nonce_error(e):
+                # If this was our last attempt, don't sleep
+                if attempt >= max_retries:
+                    break
+                    
+                # Calculate exponential backoff delay
+                delay = min(base_delay * (2 ** attempt), max_delay)
                 
-            # Calculate exponential backoff delay
-            delay = min(base_delay * (2 ** attempt), max_delay)
-            
-            # Add jitter to prevent thundering herd problem
-            if jitter:
-                delay += random.uniform(0, delay * 0.1)  # Add up to 10% jitter
-            
-            logger.info(f"Nonce conflict detected, retrying in {delay:.2f} seconds...")
-            time.sleep(delay)
+                # Add jitter to prevent thundering herd problem
+                if jitter:
+                    delay += random.uniform(0, delay * 0.1)  # Add up to 10% jitter
+                
+                logger.info(f"Nonce conflict detected, retrying in {delay:.2f} seconds...")
+                time.sleep(delay)
+                continue
+
+            # For provider rate limits / HTTP errors, try to refresh RPC and retry
+            if is_rate_limit_error(e) and refresh_web3_callback and attempt < max_retries:
+                logger.warning(f"Rate limit or provider error detected, refreshing RPC and retrying: {e}")
+                try:
+                    web3_instance, web3_acct = refresh_web3_callback()
+                except Exception as refresh_err:
+                    logger.error(f"Failed to refresh web3 provider after rate limit: {refresh_err}")
+                    return None, Exception(f"Transaction failed with non-retryable error: {e}")
+                # small backoff before retrying new provider
+                delay = min(base_delay * (2 ** attempt), max_delay)
+                if jitter:
+                    delay += random.uniform(0, delay * 0.1)
+                logger.info(f"Retrying with refreshed provider in {delay:.2f} seconds...")
+                time.sleep(delay)
+                continue
+
+            logger.error(f"Non-retryable error encountered: {e}")
+            return None, Exception(f"Transaction failed with non-retryable error: {e}")
     
     # All retries exhausted
     logger.error(f"Transaction failed after {max_retries + 1} attempts. Last error: {last_error}")
@@ -148,11 +182,14 @@ class EVMClient:
         # set private key
         self.web3_instance.eth.account.enable_unaudited_hdwallet_features()
         self.web3_acct = Account.from_key(private_key)
-        self.web3_instance.eth.defaultAccount = self.web3_acct.address
+        # web3.py v6 uses default_account instead of defaultAccount
+        self.web3_instance.eth.default_account = self.web3_acct.address
+        # ensure we are on a healthy provider (switch if rate limited)
+        self._ensure_chain_connection()
         
         logger.info(f"Connected to Ethereum node: {self.web3_instance.is_connected()}")
         logger.info(f"Using network: {self.web3_instance.eth.chain_id}")
-        logger.info(f"Using address: {self.web3_instance.eth.defaultAccount}")
+        logger.info(f"Using address: {self.web3_instance.eth.default_account}")
         logger.info(f"Current block number: {self.web3_instance.eth.block_number}")
 
     def _refresh_web3_if_needed(self):
@@ -162,6 +199,28 @@ class EVMClient:
             except Exception:
                 # keep existing instance; send will fail and upstream logic will handle
                 pass
+
+    def _refresh_web3_with_account(self):
+        """
+        Refresh the web3 provider (switches RPC if current is unhealthy) and return updated (web3, account).
+        """
+        self._refresh_web3_if_needed()
+        return self.web3_instance, self.web3_acct
+
+    def _ensure_chain_connection(self):
+        """
+        Ensure the current web3 instance can respond (e.g., not rate-limited).
+        Tries once and refreshes provider on failure.
+        """
+        for attempt in range(2):
+            try:
+                # simple health call; eth.chain_id is lightweight
+                _ = self.web3_instance.eth.chain_id
+                return
+            except Exception as e:
+                logger.warning(f"Web3 health check failed (attempt {attempt + 1}): {e}")
+                self._refresh_web3_if_needed()
+        raise Exception("Unable to establish healthy EVM RPC connection")
 
     def setup_data_bridge_contract(self):
         self._refresh_web3_if_needed()
@@ -305,6 +364,7 @@ class EVMClient:
                 self.web3_acct, 
                 contract_function, 
                 base_tx_params,
+                refresh_web3_callback=self._refresh_web3_with_account,
                 max_retries=5,
                 base_delay=1.0,
                 max_delay=30.0
@@ -379,6 +439,7 @@ class EVMClient:
                 self.web3_acct, 
                 contract_function, 
                 base_tx_params,
+                refresh_web3_callback=self._refresh_web3_with_account,
                 max_retries=5,  # configurable
                 base_delay=1.0,  # start with 1 second
                 max_delay=30.0   # max 30 seconds between retries
