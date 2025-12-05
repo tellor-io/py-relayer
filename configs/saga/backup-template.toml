@@ -1,0 +1,16 @@
+# Template for backup relayers - higher thresholds and longer heartbeats
+extends = ["saga-shared"]
+
+[commands.relay-threshold]
+# Backup settings - higher threshold and longer heartbeat
+price_threshold = 0.015  # 1.5% threshold (higher than primary)
+sleep_time = 18000       # 5 hour heartbeat (longer than primary)
+check_interval = 900     # 15 minute check interval
+backup = true            # Run in backup mode
+
+# Example usage:
+# Create configs/saga/eth-usd-backup.toml:
+# extends = ["saga/backup-template"]
+# [commands.relay-threshold]
+# query_string = "SpotPrice(eth,usd)"
+# price_api_url = "https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd"

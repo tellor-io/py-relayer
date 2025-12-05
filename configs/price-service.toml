@@ -1,0 +1,153 @@
+[server]
+host = "127.0.0.1"
+port = 8787
+cache_ttl_secs = 10
+evm_networks_config = "configs/evm-networks.toml"
+
+[providers.coingecko]
+enabled = true
+base_url = "https://api.coingecko.com/api/v3/simple/price"
+rpm = 50
+
+[providers.coinmarketcap]
+enabled = true
+base_url = "https://pro-api.coinmarketcap.com/v2/cryptocurrency/quotes/latest"
+api_key = "${CMC_PRO_API_KEY}"
+rpm = 30
+
+[providers.coinpaprika]
+enabled = true
+base_url = "https://api.coinpaprika.com/v1"
+rpm = 30
+
+[providers.coinbase]
+enabled = true
+base_url = "https://api.coinbase.com/v2"
+rpm = 60
+
+[providers.curve]
+enabled = true
+base_url = "https://prices.curve.fi/v1/usd_price/ethereum"
+rpm = 60
+
+[providers.sushiswap]
+enabled = true
+base_url = "https://api.sushi.com/price/v1/747474"
+rpm = 60
+
+[[feeds]]
+name = "eth-usd"
+quote = "usd"
+coingecko_id = "ethereum"
+coinmarketcap_id = "1027"
+coinpaprika_id = "eth-ethereum"
+coinbase_pair = "ETH-USD"
+
+[[feeds]]
+name = "btc-usd"
+quote = "usd"
+coingecko_id = "bitcoin"
+coinmarketcap_id = "1"
+coinpaprika_id = "btc-bitcoin"
+coinbase_pair = "BTC-USD"
+
+[[feeds]]
+name = "usdc-usd"
+quote = "usd"
+coingecko_id = "usd-coin"
+coinmarketcap_id = "3408"
+coinpaprika_id = "usdc-usd-coin"
+coinbase_pair = "USDC-USD"
+
+[[feeds]]
+name = "usdt-usd"
+quote = "usd"
+coingecko_id = "tether"
+coinmarketcap_id = "825"
+coinpaprika_id = "usdt-tether"
+coinbase_pair = "USDT-USD"
+
+[[feeds]]
+name = "saga-usd"
+quote = "usd"
+coingecko_id = "saga-2"
+coinmarketcap_id = "30372"
+coinpaprika_id = "saga-saga"
+
+[[feeds]]
+name = "tbtc-usd"
+quote = "usd"
+coingecko_id = "tbtc"
+coinmarketcap_id = "26133"
+coinpaprika_id = "tbtc-tbtc"
+coinbase_pair = "TBTC-USD"
+
+[[feeds]]
+name = "wsteth-usd"
+quote = "usd"
+coingecko_id = "wrapped-steth"
+coinmarketcap_id = "12409"
+coinpaprika_id = "wsteth-wrapped-steth"
+
+[[feeds]]
+name = "reth-usd"
+quote = "usd"
+coingecko_id = "rocket-pool-eth"
+coinmarketcap_id = "15060"
+coinpaprika_id = "reth-rocket-pool-eth"
+
+[[feeds]]
+name = "statom-usd"
+quote = "usd"
+coingecko_id = "stride-staked-atom"
+coinmarketcap_id = "21686"
+coinpaprika_id = "statom-stride-staked-atom"
+
+[[feeds]]
+name = "vyusd-usd"
+quote = "usd"
+handler = "vyusd"
+vyusd_contract = "0x2e3c5e514eef46727de1fe44618027a9b70d92fc"
+evm_network = "ethereum"
+usdc_feed = "usdc-usd"
+
+[[feeds]]
+name = "yusd-usd"
+quote = "usd"
+coinpaprika_id = "yusd-yusd"
+
+[[feeds]]
+name = "susde-usd"
+quote = "usd"
+coingecko_id = "ethena-staked-usde"
+coinmarketcap_id = "29471"
+coinpaprika_id = "susde-ethena-staked-usde"
+
+[[feeds]]
+name = "susds-usd"
+quote = "usd"
+coingecko_id = "susds"
+coinpaprika_id = "susds-susds"
+
+[[feeds]]
+name = "usdn-usd"
+quote = "usd"
+coingecko_id = "noble-dollar-usdn"
+coinmarketcap_id = "36538"
+coinpaprika_id = "usdn-noble-dollar-usdn"
+
+[[feeds]]
+name = "king-usd"
+quote = "usd"
+coingecko_id = "lrt-squared"
+coinmarketcap_id = "33695"
+coinpaprika_id = "king-lrt-squared"
+
+[[feeds]]
+name = "trb-usd"
+quote = "usd"
+coingecko_id = "tellor"
+coinmarketcap_id = "4944"
+coinpaprika_id = "trb-tellor"
+
+

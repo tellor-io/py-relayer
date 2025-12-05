@@ -1,0 +1,9 @@
+extends = ["base-shared"]
+
+[env]
+FEED_NAME = "trb-usd"
+
+[commands.relay-threshold]
+query_string = "SpotPrice(trb,usd)"
+price_threshold = 0.02
+offset = 20

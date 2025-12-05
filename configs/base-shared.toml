@@ -1,0 +1,29 @@
+# Shared configuration for all sepolia feeds
+[env]
+DATA_BRIDGE_ADDRESS = "0xFfa3393BE1E4b442fff6cD0df0794B0031e9CF65"  # data bridge sepolia
+LAYER_USER_ADDRESS = "0x5589e306b1920F009979a50B88caE32aecD471E4"   # TellorDataBank sepolia
+LAYER_TX_CREATOR_ADDRESS = "${LAYER_TX_CREATOR_ADDRESS_1}"  # Your Layer address
+
+# Chain endpoints
+LAYER_SWAGGER_ENDPOINT = "https://mainnet.tellorlayer.com"
+LAYER_RPC_ENDPOINT = "https://mainnet.tellorlayer.com/rpc"
+EVM_NETWORK = "base"
+
+# CoinGecko API base configuration
+PRICE_CURRENCY = "usd"
+
+# Price service
+PRICE_SERVICE_URL = "http://127.0.0.1:8787"
+PRICE_AGGREGATION = "median"
+PRICE_SERVICE_CONFIG = "configs/price-service.toml"
+
+[commands.relay-threshold]
+# threshold relayer settings
+sleep_time = 14400              # 4 hour heartbeat
+check_interval = 600
+optimistic_delay = 43200        # 12 hours
+max_attestation_age = 600       # 10 minutes
+max_data_age = 86400           # 24 hours
+min_stake_percentage = 33
+price_threshold = 0.02         # 2% default threshold
+offset = 0

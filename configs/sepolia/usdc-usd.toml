@@ -1,0 +1,11 @@
+extends = ["sepolia-shared"]
+
+[env]
+FEED_NAME = "usdc-usd"
+
+[commands.relay-threshold]
+query_string = "SpotPrice(usdc,usd)"
+price_threshold = 0.005
+offset = 0
+
+

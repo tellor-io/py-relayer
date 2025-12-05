@@ -1,0 +1,11 @@
+extends = ["saga-shared"]
+
+[env]
+FEED_NAME = "susn-usd"
+
+[commands.relay-threshold]
+query_string = "SpotPrice(susn,usd)"
+price_threshold = 0.02
+offset = 0
+
+

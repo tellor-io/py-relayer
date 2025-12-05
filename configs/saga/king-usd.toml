@@ -1,0 +1,11 @@
+extends = ["saga-shared"]
+
+[env]
+FEED_NAME = "king-usd"
+
+[commands.relay-threshold]
+query_string = "SpotPrice(king,usd)"
+price_threshold = 0.02
+offset = 0
+
+
