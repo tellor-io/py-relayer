@@ -5,5 +5,5 @@ FEED_NAME = "eth-usd"
 
 [commands.relay-threshold]
 query_string = "SpotPrice(eth,usd)"
-price_threshold = 0.02  # 1% threshold for ETH
+price_threshold = 0.01  # 1% threshold for ETH
 offset = 0

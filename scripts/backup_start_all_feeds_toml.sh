@@ -65,7 +65,7 @@ for feed in "${feeds[@]}"; do
     session_name="relayer-$NETWORK-$feed"
     
     # Start the relayer in a screen session
-    screen -dmS "$session_name" bash -c "cd '$SCRIPT_DIR/..' && relayer --config configs/$NETWORK/$feed.toml relay-threshold --verbose 2>&1 | tee -a logs/relayer-$NETWORK-$feed.log"
+    screen -dmS "$session_name" bash -c "cd '$SCRIPT_DIR/..' && relayer --config configs/$NETWORK/$feed.toml relay-threshold --verbose --backup 2>&1 | tee -a logs/relayer-$NETWORK-$feed.log"
     
     sleep 2  # Small delay between starts
 done
