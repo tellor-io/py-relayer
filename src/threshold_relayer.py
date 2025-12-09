@@ -52,6 +52,10 @@ class ThresholdRelayer:
         max_attestation_age = int(os.getenv("MAX_ATTESTATION_AGE", "600"))
         max_data_age = int(os.getenv("MAX_DATA_AGE", "14400"))
         min_stake_percentage = int(os.getenv("MIN_STAKE_PERCENTAGE", "33"))
+
+        if self.mode == "backup":
+            price_threshold = price_threshold * 2
+            self.heartbeat_interval = int(self.heartbeat_interval * 1.25)
         
         logger.info(f"Starting improved threshold relayer for query ID {query_id}")
         logger.info(f"Heartbeat interval: {self.heartbeat_interval} seconds")
