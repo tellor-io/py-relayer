@@ -1,0 +1,12 @@
+extends = ["saga-shared"]
+
+[env]
+FEED_NAME = "tbtc-usd"
+
+[commands.relay-threshold]
+query_string = "SpotPrice(tbtc,usd)"
+sleep_time = 18000
+check_interval = 900
+backup = true
+price_threshold = 0.03
+offset = 50

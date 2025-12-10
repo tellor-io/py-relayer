@@ -6,3 +6,4 @@ data/
 *.egg-info/
 reports/
 logs/
+env/
