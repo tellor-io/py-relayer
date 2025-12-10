@@ -2,12 +2,14 @@
 
 # Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Get the absolute path to the py-relayer directory
+RELAYER_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Check if network argument is provided
 if [ $# -eq 0 ]; then
     echo "Usage: $0 <network>"
     echo "Available networks:"
-    for network_dir in "$SCRIPT_DIR/../configs"/*/; do
+    for network_dir in "$RELAYER_DIR/configs"/*/; do
         if [ -d "$network_dir" ] && [[ "$(basename "$network_dir")" != *"-shared" ]]; then
             echo "  - $(basename "$network_dir")"
         fi
@@ -16,13 +18,13 @@ if [ $# -eq 0 ]; then
 fi
 
 NETWORK="$1"
-CONFIGS_DIR="$SCRIPT_DIR/../configs/$NETWORK"
+CONFIGS_DIR="$RELAYER_DIR/configs/$NETWORK"
 
 # Check if network config directory exists
 if [ ! -d "$CONFIGS_DIR" ]; then
     echo "Error: Network '$NETWORK' not found!"
         echo "Available networks:"
-        for network_dir in "$SCRIPT_DIR/../configs"/*/; do
+        for network_dir in "$RELAYER_DIR/configs"/*/; do
             if [ -d "$network_dir" ] && [[ "$(basename "$network_dir")" != *"-shared" ]]; then
                 echo "  - $(basename "$network_dir")"
             fi
@@ -55,23 +57,33 @@ echo "Found ${#feeds[@]} feeds: ${feeds[*]}"
 echo ""
 
 # Create logs directory if it doesn't exist
-mkdir -p "$SCRIPT_DIR/../logs"
+mkdir -p "$RELAYER_DIR/logs"
 
 # Start each feed
+started=0
+skipped=0
 for feed in "${feeds[@]}"; do
-    echo "Starting $NETWORK-$feed..."
-    
     # Create screen session name
     session_name="relayer-$NETWORK-$feed"
     
-    # Start the relayer in a screen session
-    screen -dmS "$session_name" bash -c "cd '$SCRIPT_DIR/..' && relayer --config configs/$NETWORK/$feed.toml relay-threshold --verbose --backup 2>&1 | tee -a logs/relayer-$NETWORK-$feed.log"
+    # Check if session already exists
+    if screen -list | grep -q "$session_name"; then
+        echo "Skipping $NETWORK-$feed (already running)"
+        ((skipped++))
+        continue
+    fi
     
+    echo "Starting $NETWORK-$feed..."
+    
+    # Start the relayer in a screen session (activate venv first)
+    screen -dmS "$session_name" bash -c "cd '$RELAYER_DIR' && source env/bin/activate && relayer --config configs/$NETWORK/$feed.toml relay-threshold --verbose --backup 2>&1 | tee -a logs/relayer-$NETWORK-$feed.log"
+    
+    ((started++))
     sleep 2  # Small delay between starts
 done
 
 echo ""
-echo "All $NETWORK feeds started! Use 'screen -ls' to see running sessions."
+echo "Started $started feeds, skipped $skipped (already running). Use 'screen -ls' to see running sessions."
 echo ""
 echo "Useful commands:"
 echo "  screen -ls                           # List all sessions"

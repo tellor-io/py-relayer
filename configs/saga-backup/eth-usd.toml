@@ -1,0 +1,12 @@
+extends = ["saga-shared"]
+
+[env]
+FEED_NAME = "eth-usd"
+
+[commands.relay-threshold]
+query_string = "SpotPrice(eth,usd)"
+sleep_time = 18000
+check_interval = 900
+backup = true
+price_threshold = 0.02
+offset = 5

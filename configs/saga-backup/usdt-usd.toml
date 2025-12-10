@@ -1,0 +1,14 @@
+extends = ["saga-shared"]
+
+[env]
+FEED_NAME = "usdt-usd"
+
+[commands.relay-threshold]
+query_string = "SpotPrice(usdt,usd)"
+sleep_time = 18000
+check_interval = 900
+backup = true
+price_threshold = 0.01
+offset = 65
+
+
