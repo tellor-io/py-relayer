@@ -5,8 +5,8 @@ from src.relayer import start_relayer, update_user_oracle_data, data_bridge_init
 from src.threshold_relayer import start_primary_threshold_relayer, start_backup_threshold_relayer
 from src.bridge_client import relay_withdraw
 from src.evm_client import EVMClient
-from src.layer_scraper import scrape_layer
-from src.report import generate_power_report
+# from src.layer_scraper import scrape_layer
+# from src.report import generate_power_report
 from src.logger_utils import setup_logging
 from src.logger_utils import get_logger
 from src.valset_relayer import start_valset_relayer
@@ -292,50 +292,50 @@ def relay_bridge(withdraw_id, eth_private_key, web3_provider, evm_network, layer
         logger.error(f"Error relaying withdraw: {error}")
         exit(1)
 
-@cli.command()
-@add_logging_options
-@click.option('--query-id', envvar='QUERY_ID', help='Query ID to scrape (alternative to --query-string)')
-@click.option('--query-string', envvar='QUERY_STRING', help='Query string like "SpotPrice(eth,usd)" (alternative to --query-id)')
-@click.option('--scrape-count', type=int, default=1000, help='Number of data points to scrape')
-@click.option('--output-file', envvar='LAYER_DATA_CSV', default="data/layer_data.csv", help='Output CSV file path')
-@click.option('--scrape-micro', is_flag=True, help='Scrape micro reports after aggregate data')
-def scrape(query_id, query_string, scrape_count, output_file, scrape_micro, verbose, no_color):
-    """Scrape historical data from Layer chain"""
-    configure_logging(verbose=verbose, no_color=no_color)
+# @cli.command()
+# @add_logging_options
+# @click.option('--query-id', envvar='QUERY_ID', help='Query ID to scrape (alternative to --query-string)')
+# @click.option('--query-string', envvar='QUERY_STRING', help='Query string like "SpotPrice(eth,usd)" (alternative to --query-id)')
+# @click.option('--scrape-count', type=int, default=1000, help='Number of data points to scrape')
+# @click.option('--output-file', envvar='LAYER_DATA_CSV', default="data/layer_data.csv", help='Output CSV file path')
+# @click.option('--scrape-micro', is_flag=True, help='Scrape micro reports after aggregate data')
+# def scrape(query_id, query_string, scrape_count, output_file, scrape_micro, verbose, no_color):
+#     """Scrape historical data from Layer chain"""
+#     configure_logging(verbose=verbose, no_color=no_color)
     
-    # validate that either query_id or query_string is provided
-    if not query_id and not query_string:
-        logger.error("Either --query-id or --query-string must be provided")
-        exit(1)
+#     # validate that either query_id or query_string is provided
+#     if not query_id and not query_string:
+#         logger.error("Either --query-id or --query-string must be provided")
+#         exit(1)
     
-    # parse query string if provided
-    final_query_id, final_query_data = parse_query_string_if_provided(query_string, query_id, None)
+#     # parse query string if provided
+#     final_query_id, final_query_data = parse_query_string_if_provided(query_string, query_id, None)
     
-    # Set environment variables
-    os.environ['QUERY_ID'] = final_query_id
-    os.environ['SCRAPE_COUNT'] = str(scrape_count)
-    os.environ['LAYER_DATA_CSV'] = output_file
+#     # Set environment variables
+#     os.environ['QUERY_ID'] = final_query_id
+#     os.environ['SCRAPE_COUNT'] = str(scrape_count)
+#     os.environ['LAYER_DATA_CSV'] = output_file
 
-    logger.info(f"Scraping layer data to {output_file}")
+#     logger.info(f"Scraping layer data to {output_file}")
 
-    scrape_layer(final_query_id, output_file, scrape_count, scrape_micro)
+#     scrape_layer(final_query_id, output_file, scrape_count, scrape_micro)
 
-@cli.command()
-@add_logging_options
-@click.option('--input-file', envvar='LAYER_DATA_CSV', default="data/layer_data.csv", help='Input CSV file path')
-@click.option('--terminal-plot', is_flag=True, help='Show plot in terminal')
-@click.option('--micro', is_flag=True, help='Analyze micro reports')
-@click.option('--assume-all', is_flag=True, default=False, help='Assume all reporters existed from the beginning')
-def report(input_file, terminal_plot, micro, assume_all, verbose, no_color):
-    """Generate reports from scraped data"""
-    configure_logging(verbose=verbose, no_color=no_color)
-    if not os.path.exists(input_file):
-        logger.error(f"Input file {input_file} does not exist")
-        return
+# @cli.command()
+# @add_logging_options
+# @click.option('--input-file', envvar='LAYER_DATA_CSV', default="data/layer_data.csv", help='Input CSV file path')
+# @click.option('--terminal-plot', is_flag=True, help='Show plot in terminal')
+# @click.option('--micro', is_flag=True, help='Analyze micro reports')
+# @click.option('--assume-all', is_flag=True, default=False, help='Assume all reporters existed from the beginning')
+# def report(input_file, terminal_plot, micro, assume_all, verbose, no_color):
+#     """Generate reports from scraped data"""
+#     configure_logging(verbose=verbose, no_color=no_color)
+#     if not os.path.exists(input_file):
+#         logger.error(f"Input file {input_file} does not exist")
+#         return
     
-    logger.info(f"Generating reports from {input_file}")
-    _ = generate_power_report(input_file, show_terminal_plot=terminal_plot, micro_report=micro, assume_all_existed_from_start=assume_all)
-    logger.info("\nReport generated in reports/power_vs_height.png")
+#     logger.info(f"Generating reports from {input_file}")
+#     _ = generate_power_report(input_file, show_terminal_plot=terminal_plot, micro_report=micro, assume_all_existed_from_start=assume_all)
+#     logger.info("\nReport generated in reports/power_vs_height.png")
 
 @cli.command()
 @add_logging_options
@@ -400,6 +400,7 @@ def relay_threshold(query_id, query_data, query_string, sleep_time, price_thresh
                     min_stake_percentage, offset, backup, verbose, no_color):
     """Start the threshold relayer process (heartbeat + price threshold)"""
     configure_logging(verbose=verbose, no_color=no_color)
+    logger.info(f"Starting threshold relayer process!!!")
     
     # validate that either query_id/query_data or query_string is provided
     if query_string:

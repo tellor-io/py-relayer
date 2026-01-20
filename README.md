@@ -4,7 +4,7 @@ Relayers for Tellor Layer that synchronize validator sets, relay oracle data to 
 
 ## Setup
 
-We assume you have python installed. Note, if you are running on ubuntu, see the additional requirements below.
+We assume you have Python installed (this repo targets **Python 3.12**). Note, if you are running on ubuntu, see the additional requirements below.
 
 1. Clone the repo:
 ```bash
@@ -18,8 +18,8 @@ cd py-relayer
 
 3. Create a virtual environment:
 ```bash
-python3 -m venv venv
-source venv/bin/activate
+python3.12 -m venv venv3.12
+source venv3.12/bin/activate
 ```
 
 4. Install the dependencies:
@@ -27,7 +27,12 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-5. Copy the .env.example file to .env and set the appropriate environment variables:
+5. Install the relayer CLI in editable mode (provides the `relayer` command):
+```bash
+pip install -e .
+```
+
+6. Copy the .env.example file to .env and set the appropriate environment variables:
 ```bash
 cp .env.example .env
 ```
@@ -108,7 +113,7 @@ Run a shared HTTP price-service that batches/caches external provider calls (Coi
 relayer price-service
 
 # or explicit
-PRICE_SERVICE_CONFIG=configs/price-service.toml ./venv/bin/python -m src.cli price-service --host 0.0.0.0 --port 8787
+PRICE_SERVICE_CONFIG=configs/price-service.toml ./venv3.12/bin/python -m src.cli price-service --host 0.0.0.0 --port 8787
 ```
 
 Endpoints:

@@ -230,7 +230,8 @@ class TellorDataBankAdaptor(ContractAdapter, ReadableContractAdapter):
             ContractFunction: The contract function to call
         """
         # Get the current aggregate data for the query id
-        return contract.functions.getCurrentAggregateData(query_id)
+        query_id_bytes = bytes.fromhex(query_id)
+        return contract.functions.getCurrentAggregateData(query_id_bytes)
     
     def decode_last_relayed_data(self, data):
         """

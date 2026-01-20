@@ -1,5 +1,9 @@
 #!/bin/bash
 
+# Stop all relayer feeds for all networks
+# Usage: ./stop_all_feeds.sh <network>
+# or: ./stop_all_feeds.sh all
+
 # Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -53,6 +57,17 @@ if [ "$NETWORK" = "all" ]; then
     echo ""
     echo "All relayer sessions stopped."
     
+    # Final cleanup for "all" case: kill any remaining orphaned relayer processes
+    remaining_procs=$(pgrep -f "relayer --config configs/.* relay-threshold" 2>/dev/null || true)
+    if [ -n "$remaining_procs" ]; then
+        echo ""
+        echo "Found orphaned relayer processes, killing them..."
+        pkill -f "relayer --config configs/.* relay-threshold" 2>/dev/null || true
+        sleep 1
+        # Also kill any remaining tee processes writing to relayer logs
+        pkill -f "tee -a logs/relayer-.*\.log" 2>/dev/null || true
+    fi
+    
 else
     # Stop feeds for specific network
     CONFIGS_DIR="$SCRIPT_DIR/../configs/$NETWORK"
@@ -103,9 +118,12 @@ else
         screen -S "$session_name" -X quit 2>/dev/null || echo "  Session $session_name not found or already stopped"
     done
     
-    # Kill any remaining orphaned processes for this network
+    # Kill any remaining orphaned processes for this network only
     sleep 2
     pkill -f "relayer --config configs/$NETWORK/.* relay-threshold" 2>/dev/null || true
+    
+    # Also kill any remaining tee processes writing to logs for this network only
+    pkill -f "tee -a logs/relayer-$NETWORK-.*\.log" 2>/dev/null || true
     
     echo ""
     echo "All $NETWORK feeds stopped."
@@ -114,14 +132,3 @@ fi
 echo ""
 echo "Remaining sessions:"
 screen -ls | grep "relayer-" || echo "No relayer sessions running."
-
-# Final cleanup: kill any remaining orphaned relayer processes
-remaining_procs=$(pgrep -f "relayer --config configs/.* relay-threshold" 2>/dev/null || true)
-if [ -n "$remaining_procs" ]; then
-    echo ""
-    echo "Found orphaned relayer processes, killing them..."
-    pkill -f "relayer --config configs/.* relay-threshold" 2>/dev/null || true
-    sleep 1
-    # Also kill any remaining tee processes writing to relayer logs
-    pkill -f "tee -a logs/relayer-.*\.log" 2>/dev/null || true
-fi

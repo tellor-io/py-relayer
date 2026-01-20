@@ -25,7 +25,7 @@ def transform_data_bridge_reset_params(checkpoint_params: dict) -> dict:
     return reset_params
 
 def transform_valset_update_params(valset_update_params: dict) -> dict:
-    logger.info("Transforming valset update params...")
+    logger.debug("Transforming valset update params...")
     derived_signatures = derive_signatures(valset_update_params["valset_sigs"]["signatures"], valset_update_params["previous_valset"]["bridge_validator_set"], valset_update_params["valset_checkpoint"]["checkpoint"])
     logger.debug(f"Derived signatures: {derived_signatures}")
     update_params = {
@@ -91,7 +91,7 @@ def transform_oracle_update_params(oracle_update_params: dict) -> dict:
     return update_params
 
 def transform_withdraw_tx_params(withdraw_tx_params: dict, withdraw_id: int) -> dict:
-    logger.info("Transforming withdraw tx params...")
+    logger.debug("Transforming withdraw tx params...")
     attestations = withdraw_tx_params["attestations"]["attestations"]
     attestation_data = withdraw_tx_params["attestation_data"]
     validator_set = withdraw_tx_params["validator_set"]["bridge_validator_set"]

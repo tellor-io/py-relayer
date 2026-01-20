@@ -1,7 +1,11 @@
 #!/bin/bash
 
+# Start all feeds for a specific network
+# Usage: ./start_all_feeds_toml.sh <network>
+
 # Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+RELAYER_DIR="$SCRIPT_DIR/../"
 
 # Check if network argument is provided
 if [ $# -eq 0 ]; then
@@ -21,13 +25,13 @@ CONFIGS_DIR="$SCRIPT_DIR/../configs/$NETWORK"
 # Check if network config directory exists
 if [ ! -d "$CONFIGS_DIR" ]; then
     echo "Error: Network '$NETWORK' not found!"
-        echo "Available networks:"
-        for network_dir in "$SCRIPT_DIR/../configs"/*/; do
-            if [ -d "$network_dir" ] && [[ "$(basename "$network_dir")" != *"-shared" ]]; then
-                echo "  - $(basename "$network_dir")"
-            fi
-        done
-        exit 1
+    echo "Available networks:"
+    for network_dir in "$SCRIPT_DIR/../configs"/*/; do
+        if [ -d "$network_dir" ] && [[ "$(basename "$network_dir")" != *"-shared" ]]; then
+            echo "  - $(basename "$network_dir")"
+        fi
+    done
+    exit 1
 fi
 
 echo "Starting all $NETWORK price feed relayers..."
@@ -55,18 +59,18 @@ echo "Found ${#feeds[@]} feeds: ${feeds[*]}"
 echo ""
 
 # Create logs directory if it doesn't exist
-mkdir -p "$SCRIPT_DIR/../logs"
+mkdir -p "$RELAYER_DIR/logs"
 
 # Start each feed
 for feed in "${feeds[@]}"; do
     echo "Starting $NETWORK-$feed..."
-    
+
     # Create screen session name
     session_name="relayer-$NETWORK-$feed"
-    
+
     # Start the relayer in a screen session
-    screen -dmS "$session_name" bash -c "cd '$SCRIPT_DIR/..' && relayer --config configs/$NETWORK/$feed.toml relay-threshold --verbose 2>&1 | tee -a logs/relayer-$NETWORK-$feed.log"
-    
+    screen -dmS "$session_name" bash -c "cd '$RELAYER_DIR' && relayer --config configs/$NETWORK/$feed.toml relay-threshold --verbose 2>&1 | tee -a logs/relayer-$NETWORK-$feed.log"
+
     sleep 2  # Small delay between starts
 done
 

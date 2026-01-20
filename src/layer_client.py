@@ -4,6 +4,7 @@ import time
 import os
 from dateutil import parser
 from src.logger_utils import get_logger
+from src.backoff import poll_with_backoff
 
 logger = get_logger(__name__)
 
@@ -16,7 +17,7 @@ logger = get_logger(__name__)
 def get_layer_connection_status() -> tuple[str, Exception]:
     swagger_endpoint = os.getenv("LAYER_SWAGGER_ENDPOINT")
     rpc_endpoint = os.getenv("LAYER_RPC_ENDPOINT")
-    logger.info("Getting layer connection status")
+    logger.debug("Getting layer connection status")
     logger.debug(f"swagger endpoint: {swagger_endpoint}")
     logger.debug(f"rpc endpoint: {rpc_endpoint}")
     request = f"{rpc_endpoint}/status"
@@ -114,6 +115,14 @@ def get_current_tip(query_data: str) -> tuple[dict, Exception]:
     request_string = f"/tellor-io/layer/oracle/get_current_tip/{query_data}"
     return _query_layer_rest_api(request_string, "get_current_tip")
 
+def get_cycle_list() -> tuple[dict, Exception]:
+    """
+    Fetch the current oracle cycle list (list of queryData hex strings).
+    Note: cycle list can change over time.
+    """
+    request_string = f"/tellor-io/layer/oracle/get_cycle_list"
+    return _query_layer_rest_api(request_string, "get_cycle_list")
+
 def get_snapshots_by_report(query_id: str, timestamp: int) -> tuple[dict, Exception]:
     query_id = strip_0x(query_id)
     request_string = f"/layer/bridge/get_snapshots_by_report/{query_id}/{timestamp}"
@@ -146,7 +155,7 @@ def get_bridge_module_params() -> tuple[dict, Exception]:
 # ************************************************************************************************
 
 def query_latest_oracle_data(query_id: str) -> tuple[dict, Exception]:
-    logger.info("Querying latest oracle data")
+    logger.debug("Querying latest oracle data")
     # subtract 1 second to account for attestation time,
     # TODO: optimize
     current_time = int(time.time()) * 1000 - 1000 
@@ -168,7 +177,7 @@ def get_attestation_data_before(query_id: str, timestamp: int) -> tuple[dict, Ex
     Returns:
         A tuple containing the attestation data and an exception if an error occurs
     """
-    logger.info(f"Querying attestation data before {timestamp}")
+    logger.debug(f"Querying attestation data before {timestamp}")
     report, e = get_data_before(query_id, timestamp)
     if e:
         return None, e
@@ -189,7 +198,7 @@ def get_attestation_data_before(query_id: str, timestamp: int) -> tuple[dict, Ex
     return attestation_data, None
 
 def get_oracle_proof(query_id: str, timestamp: int) -> tuple[dict, Exception]:
-    logger.info(f"Querying oracle proof for {timestamp}")
+    logger.debug(f"Querying oracle proof for {timestamp}")
     snapshots, e = get_snapshots_by_report(query_id, timestamp)
     if e:
         return None, e
@@ -219,25 +228,41 @@ def get_oracle_proof(query_id: str, timestamp: int) -> tuple[dict, Exception]:
         threshold
     )
     if not sufficient_power:
-        retry_sleep_time = 2
-        retry_count = 0
-        max_retries = 5
-        while retry_count < max_retries:
-            logger.warning(f"Insufficient attestation power, sleeping for {retry_sleep_time} seconds")
-            time.sleep(retry_sleep_time)
-            attestations, e = get_attestations_by_snapshot(last_snapshot)
-            if e:
-                return None, e
-            sufficient_power = get_sufficient_attestation_power(
-                attestations.get("attestations"), 
-                current_validator_set.get("bridge_validator_set"), 
-                threshold
+        logger.info(
+            "Insufficient attestation power, polling for more (query_id=%s ts_ms=%s timeout_s=%s)",
+            strip_0x(query_id),
+            timestamp,
+            float(os.getenv("ATTESTATION_WAIT_TIMEOUT", "30")),
+        )
+        # Attestations are typically ready a couple blocks after an aggregate exists / is requested.
+        # To minimize latency, do a short fast-poll phase, then backoff up to a cap.
+        fast_attempts = int(os.getenv("ATTESTATION_FAST_ATTEMPTS", "12"))
+        fast_sleep = float(os.getenv("ATTESTATION_FAST_SLEEP", "0.5"))
+        max_sleep = float(os.getenv("ATTESTATION_MAX_SLEEP", "5"))
+        timeout = float(os.getenv("ATTESTATION_WAIT_TIMEOUT", "30"))
+
+        def _refetch_if_sufficient():
+            nonlocal attestations
+            attestations, err = get_attestations_by_snapshot(last_snapshot)
+            if err:
+                raise err
+            ok = get_sufficient_attestation_power(
+                attestations.get("attestations"),
+                current_validator_set.get("bridge_validator_set"),
+                threshold,
             )
-            if sufficient_power:
-                break
-            retry_count += 1
-            retry_sleep_time = int(retry_sleep_time * 1.5)
-        if not sufficient_power:
+            return attestations if ok else None
+
+        try:
+            attestations = poll_with_backoff(
+                _refetch_if_sufficient,
+                fast_attempts=fast_attempts,
+                fast_sleep=fast_sleep,
+                max_sleep=max_sleep,
+                timeout=timeout,
+                description="sufficient attestation power",
+            )
+        except TimeoutError:
             return None, Exception("layer_client: Insufficient attestation power")
     oracle_proof = {
         "attestations": attestations,
@@ -257,7 +282,7 @@ def get_sufficient_attestation_power(attestations: list[dict], current_validator
             validator_power = int(current_validator_set[i]["power"])
             power_sum += validator_power
     sufficient = power_sum >= int(threshold)
-    logger.info(f"Total power: {power_sum}, threshold: {threshold}, sufficient: {sufficient}")
+    logger.debug(f"Total power: {power_sum}, threshold: {threshold}, sufficient: {sufficient}")
     return sufficient
 
 def get_next_validator_set_timestamp(given_timestamp: int) -> tuple[str, Exception]:
@@ -329,7 +354,7 @@ def get_layer_latest_validator_timestamp() -> tuple[str, Exception]:
     return latest_timestamp.get("timestamp"), None
 
 def get_current_validator_set() -> tuple[dict, Exception]:
-    logger.info("Getting current validator set")
+    logger.debug("Getting current validator set")
     latest_timestamp, e = get_layer_latest_validator_timestamp()
     if e:
         return None, e

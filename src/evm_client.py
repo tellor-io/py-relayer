@@ -84,7 +84,7 @@ def send_transaction_with_retry(
             
             tx = contract_function.build_transaction(tx_params)
             signed_tx = web3_instance.eth.account.sign_transaction(tx, private_key=web3_acct.key)
-            tx_hash = web3_instance.eth.send_raw_transaction(signed_tx.rawTransaction)
+            tx_hash = web3_instance.eth.send_raw_transaction(signed_tx.raw_transaction)
             
             logger.info(f"Transaction submitted successfully on attempt {attempt + 1} with nonce {current_nonce}")
             return tx_hash, None
@@ -430,7 +430,7 @@ class EVMClient:
             base_tx_params = {
                 'from': self.web3_acct.address,
                 'gas': 800000,
-                'gasPrice': int(self.web3_instance.eth.gas_price * 1.25)
+                'gasPrice': int(self.web3_instance.eth.gas_price * 1.5)
             }
             
             # Use retry logic for transaction submission
