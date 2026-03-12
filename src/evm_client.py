@@ -238,13 +238,18 @@ class EVMClient:
         self.layer_user_contract = self.web3_instance.eth.contract(address=layer_user_address, abi=abi)
         logger.info(f"Layer user contract: {self.layer_user_contract.address}")
 
-    def setup_token_bridge_contract(self):
+    def setup_token_bridge_contract(self, legacy: bool = False):
         self._refresh_web3_if_needed()
-        token_bridge_address = os.getenv("TOKEN_BRIDGE_ADDRESS")
-        with open("abis/TokenBridge.json") as f:
+        if legacy:
+            token_bridge_address = os.getenv("TOKEN_BRIDGE_LEGACY_ADDRESS") or os.getenv("TOKEN_BRIDGE_ADDRESS")
+            abi_path = "abis/TokenBridge.json"
+        else:
+            token_bridge_address = os.getenv("TOKEN_BRIDGE_ADDRESS")
+            abi_path = "abis/TokenBridgeV2.json"
+        with open(abi_path) as f:
             abi = json.load(f)["abi"]
         self.token_bridge_contract = self.web3_instance.eth.contract(address=token_bridge_address, abi=abi)
-        logger.info(f"Token bridge contract: {self.token_bridge_contract.address}")
+        logger.info(f"Token bridge contract ({'legacy' if legacy else 'v2'}): {self.token_bridge_contract.address}")
 
     def setup_layer_test_user_contract(self):
         self._refresh_web3_if_needed()
@@ -537,15 +542,45 @@ class EVMClient:
             signed_tx = self.web3_instance.eth.account.sign_transaction(tx, self.web3_acct.key)
             tx_hash = self.web3_instance.eth.send_raw_transaction(signed_tx.raw_transaction)
             logger.info(f"Withdraw tx hash: {tx_hash.hex()}")
-            
+
             # Wait for receipt and check success
             success, _ = self.wait_for_transaction_receipt_and_log(tx_hash, "Layer withdrawal")
             if not success:
                 return None
-                
+
             return tx_hash
         except Exception as e:
             logger.error(f"Error withdrawing from layer: {e}")
+            return None
+
+    def reverify_extra_withdraw(self, params: dict):
+        """Call TokenBridgeV2.reverifyExtraWithdraw (V2 only)."""
+        if not self.token_bridge_contract:
+            raise Exception("Token bridge contract not initialized")
+        try:
+            self._refresh_web3_if_needed()
+            tx = self.token_bridge_contract.functions.reverifyExtraWithdraw(
+                params['oracle_attestation_data'],
+                params['current_validator_set'],
+                params['sigs'],
+                params['withdraw_id']
+            ).build_transaction({
+                'from': self.web3_acct.address,
+                'nonce': self.web3_instance.eth.get_transaction_count(self.web3_acct.address),
+                'gas': 500000,
+                'gasPrice': int(self.web3_instance.eth.gas_price * 1.25)
+            })
+            signed_tx = self.web3_instance.eth.account.sign_transaction(tx, self.web3_acct.key)
+            tx_hash = self.web3_instance.eth.send_raw_transaction(signed_tx.raw_transaction)
+            logger.info(f"Reverify extra withdraw tx hash: {tx_hash.hex()}")
+
+            success, _ = self.wait_for_transaction_receipt_and_log(tx_hash, "Reverify extra withdraw")
+            if not success:
+                return None
+
+            return tx_hash
+        except Exception as e:
+            logger.error(f"Error reverifying extra withdraw: {e}")
             return None
 
     def get_withdraw_claimed_status(self, withdraw_id: int) -> bool:

@@ -64,9 +64,16 @@ relayer relay --query-string "SpotPrice(eth,usd)" \
 ```
 
 ### Token Bridge Withdraw Relayer
+By default, `relay-bridge` uses the **TokenBridge V2** contract (`TRBBridgeV2` query type) and calls `withdrawFromLayer`.
+
 ```bash
-relayer relay-bridge --data-bridge-address 0xa73Efa04476B45E5bBAa68A59f7Ee2A21e14FDD4 --token-bridge-address 0x6ac02F3887B358591b8B2D22CfB1F36Fa5843867 --withdraw-id 8
+relayer relay-bridge --data-bridge-address <DATA_BRIDGE> --token-bridge-address <TOKEN_BRIDGE_V2> --withdraw-id 8 ...
 ```
+
+- **`--legacy`**: Relay to the legacy TokenBridge V1 (`TRBBridge` query type). Requires `TOKEN_BRIDGE_LEGACY_ADDRESS` in config or `--token-bridge-legacy-address`.
+- **`--reverify`**: Call TokenBridge V2 `reverifyExtraWithdraw` (e.g. after bridge pause/unpause) for a withdraw that has pending amount to claim.
+
+Config: set `TOKEN_BRIDGE_LEGACY_ADDRESS` in your env/config when using `--legacy`.
 
 ### Initialize Data Bridge
 This calls the data bridge `init` function to set the initial validator set. The `init` function can only be called by the contract deployer, and only once.

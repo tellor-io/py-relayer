@@ -270,11 +270,23 @@ def update(query_id, query_string, contract_type, verbose, no_color):
 @click.option('--layer-swagger', envvar='LAYER_SWAGGER_ENDPOINT', required=True, help='Layer swagger endpoint')
 @click.option('--layer-rpc', envvar='LAYER_RPC_ENDPOINT', required=True, help='Layer RPC endpoint')
 @click.option('--data-bridge-address', envvar='DATA_BRIDGE_ADDRESS', required=True, help='Tellor data bridge contract address')
-@click.option('--token-bridge-address', envvar='TOKEN_BRIDGE_ADDRESS', required=True, help='Token Bridge contract address')
+@click.option('--token-bridge-address', envvar='TOKEN_BRIDGE_ADDRESS', help='Token Bridge V2 contract address (default when not using --legacy)')
+@click.option('--token-bridge-legacy-address', envvar='TOKEN_BRIDGE_LEGACY_ADDRESS', help='Token Bridge V1 contract address (only used with --legacy)')
 @click.option('--layer-tx-creator-address', envvar='LAYER_TX_CREATOR_ADDRESS', required=True, help='Local keyring address used for creating transactions on layer')
-def relay_bridge(withdraw_id, eth_private_key, web3_provider, evm_network, layer_swagger, layer_rpc, data_bridge_address, token_bridge_address, layer_tx_creator_address, verbose, no_color):
-    """Relay a specific withdraw from Layer to EVM chain"""
+@click.option('--legacy', is_flag=True, help='Relay to legacy TokenBridge V1 (TRBBridge query type, uses TOKEN_BRIDGE_LEGACY_ADDRESS)')
+@click.option('--reverify', is_flag=True, help='Call TokenBridgeV2.reverifyExtraWithdraw for an existing withdraw with pending amount')
+def relay_bridge(withdraw_id, eth_private_key, web3_provider, evm_network, layer_swagger, layer_rpc, data_bridge_address, token_bridge_address, token_bridge_legacy_address, layer_tx_creator_address, legacy, reverify, verbose, no_color):
+    """Relay a withdraw from Layer to EVM (default: V2 withdrawFromLayer). Use --legacy for V1 bridge, --reverify for reverifyExtraWithdraw."""
     configure_logging(verbose=verbose, no_color=no_color)
+    if legacy and reverify:
+        logger.error("Cannot use both --legacy and --reverify")
+        exit(1)
+    if legacy and not token_bridge_legacy_address:
+        logger.error("TOKEN_BRIDGE_LEGACY_ADDRESS (or --token-bridge-legacy-address) is required when using --legacy")
+        exit(1)
+    if not legacy and not token_bridge_address:
+        logger.error("TOKEN_BRIDGE_ADDRESS (or --token-bridge-address) is required for V2 relay (default or --reverify)")
+        exit(1)
     os.environ['ETH_PRIVATE_KEY'] = to_checksum_address(eth_private_key)
     if web3_provider:
         os.environ['WEB3_PROVIDER_URL'] = web3_provider
@@ -283,10 +295,13 @@ def relay_bridge(withdraw_id, eth_private_key, web3_provider, evm_network, layer
     os.environ['LAYER_SWAGGER_ENDPOINT'] = layer_swagger
     os.environ['LAYER_RPC_ENDPOINT'] = layer_rpc
     os.environ['DATA_BRIDGE_ADDRESS'] = to_checksum_address(data_bridge_address)
-    os.environ['TOKEN_BRIDGE_ADDRESS'] = to_checksum_address(token_bridge_address)
+    if token_bridge_address:
+        os.environ['TOKEN_BRIDGE_ADDRESS'] = to_checksum_address(token_bridge_address)
+    if token_bridge_legacy_address:
+        os.environ['TOKEN_BRIDGE_LEGACY_ADDRESS'] = to_checksum_address(token_bridge_legacy_address)
     os.environ['LAYER_TX_CREATOR_ADDRESS'] = layer_tx_creator_address
 
-    _, error = relay_withdraw(withdraw_id)
+    _, error = relay_withdraw(withdraw_id, legacy=legacy, reverify=reverify)
     if error:
         logger.error(f"Error relaying withdraw: {error}")
         exit(1)
