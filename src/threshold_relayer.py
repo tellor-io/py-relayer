@@ -22,6 +22,7 @@ from src.layer_client import (
 )
 from src.layer_tx_client import tip
 from src.logger_utils import get_logger
+from eth_utils import decode_hex
 
 logger = get_logger(__name__)
 
@@ -624,7 +625,7 @@ class ThresholdRelayer:
             value_hex = latest_agg_report.get("aggregate_value") or latest_agg_report.get("aggregateValue")
             if not value_hex:
                 return None
-            value_bytes = bytes.fromhex(str(value_hex))
+            value_bytes = decode_hex(str(value_hex))
             value_decoded = decode(["uint256"], value_bytes)
             return float(value_decoded[0]) / 10**18
         except Exception:

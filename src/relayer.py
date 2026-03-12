@@ -10,6 +10,7 @@ from src.layer_tx_client import request_attestations
 from src.logger_utils import get_logger
 from src.price_service_client import get_price_from_service
 from src.backoff import poll_with_backoff
+from eth_utils import decode_hex
 
 logger = get_logger(__name__)
 
@@ -578,7 +579,7 @@ def get_current_price_from_api() -> tuple[float, Exception]:
         
         # Decode price from oracle data
         value_hex = oracle_data["attestation_data"]["aggregate_value"]
-        value_bytes = bytes.fromhex(value_hex)
+        value_bytes = decode_hex(value_hex)
         value_decoded = decode(["uint256"], value_bytes)
         return float(value_decoded[0])/10**18, None
     except Exception as e:

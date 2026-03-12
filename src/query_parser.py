@@ -4,6 +4,7 @@ import re
 from typing import Dict, List, Tuple, Any, Optional
 from eth_abi import encode
 from web3 import Web3
+from eth_utils import decode_hex
 from src.logger_utils import get_logger
 
 logger = get_logger(__name__)
@@ -180,7 +181,7 @@ class QueryParser:
         # handle bytes and bytes32
         if arg_type.startswith('bytes'):
             if value.startswith('0x'):
-                return bytes.fromhex(value[2:])
+                return decode_hex(value[2:])
             else:
                 # treat as string and encode to bytes
                 return value.encode('utf-8')

@@ -15,6 +15,7 @@ from typing import Optional, Tuple
 
 from clamfig.base import Registry
 from eth_abi import decode
+from eth_utils import decode_hex
 
 # Ensure older telliot-feeds releases can import under eth-abi v5+
 # from src.eth_abi_compat import ensure_eth_abi_single_helpers
@@ -51,7 +52,7 @@ def _get_query_from_data(query_data: bytes) -> AbiQuery | JsonQuery | None:
 
 
 def _get_query(query_data_hex: str) -> AbiQuery | JsonQuery | None:
-    qd = bytes.fromhex(_strip_0x(query_data_hex))
+    qd = decode_hex(query_data_hex)
     return _get_query_from_data(qd)
 
 

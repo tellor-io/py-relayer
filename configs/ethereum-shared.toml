@@ -4,6 +4,7 @@ DATA_BRIDGE_ADDRESS = "0xFfa3393BE1E4b442fff6cD0df0794B0031e9CF65"  # data bridg
 TOKEN_BRIDGE_ADDRESS = "0x5589e306b1920F009979a50B88caE32aecD471E4"  # token bridge ethereum mainnet
 LAYER_USER_ADDRESS = "0x5526e7e7CF982f5D3045DAf18b7e813E4b7a8FE5"   # TellorDataBank ethereum mainnet
 LAYER_TX_CREATOR_ADDRESS = "${LAYER_TX_CREATOR_ADDRESS_1}"  # Your Layer address
+PRICE_SOURCE = "telliot-feeds"
 
 # Chain endpoints
 LAYER_SWAGGER_ENDPOINT = "https://mainnet.tellorlayer.com"
