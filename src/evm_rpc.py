@@ -3,6 +3,7 @@ import threading
 import time
 from typing import Any, Dict, List, Optional
 
+from urllib.parse import urlparse
 from web3 import Web3
 from web3.providers.rpc import HTTPProvider
 
@@ -11,6 +12,20 @@ from src.logger_utils import get_logger
 
 
 logger = get_logger(__name__)
+
+def _redact_rpc_url(url: str) -> str:
+    """
+    Redact API keys / paths from RPC URLs for safe logging.
+    Keeps only scheme://host[:port]
+    """
+    try:
+        p = urlparse(url)
+        host = p.hostname or ""
+        port = f":{p.port}" if p.port else ""
+        scheme = p.scheme or "http"
+        return f"{scheme}://{host}{port}"
+    except Exception:
+        return "<redacted>"
 
 
 class _NetworkState:
@@ -84,7 +99,7 @@ class EvmRpcResolver:
                         ns.last_switch_time = now
                         ns.current_provider_index = idx
                         ns.consecutive_errors = 0
-                        logger.info(f"EVM RPC selected network={network} url={url}")
+                        logger.info(f"EVM RPC selected network={network} url={_redact_rpc_url(url)}")
                     return w3
 
             # None connected

@@ -3,6 +3,7 @@
 DATA_BRIDGE_ADDRESS = "0x01694d2C99415b736285a6f334248330c2BCdA35"  # data bridge saga
 LAYER_USER_ADDRESS = "0x6f250229af8D83c51500f3565b10E93d8907B644"   # TellorDataBank saga
 LAYER_TX_CREATOR_ADDRESS = "${LAYER_TX_CREATOR_ADDRESS_1}"  # Your Layer address
+PRICE_SOURCE = "telliot-feeds"
 
 # Chain endpoints
 LAYER_SWAGGER_ENDPOINT = "https://mainnet.tellorlayer.com"

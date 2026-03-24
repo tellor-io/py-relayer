@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Backup and start all feeds for a specific network
+# Usage: ./backup_start_all_feeds_toml.sh <network>
+
 # Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Get the absolute path to the py-relayer directory

@@ -6,4 +6,5 @@ data/
 *.egg-info/
 reports/
 logs/
+venv3.12/
 env/

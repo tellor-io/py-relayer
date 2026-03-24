@@ -9,6 +9,8 @@ from src.email_client import send_email_alert
 from src.layer_tx_client import request_attestations
 from src.logger_utils import get_logger
 from src.price_service_client import get_price_from_service
+from src.backoff import poll_with_backoff
+from eth_utils import decode_hex
 
 logger = get_logger(__name__)
 
@@ -68,7 +70,15 @@ def get_oracle_data_optimized(query_id, optimistic_delay=900, max_attestation_ag
     - otherwise, getDataBefore(now - optimistic_delay)
         - if this report has more stake than min_stake_percentage, request new attestations for this and relay
     """
-    logger.debug(f"Getting oracle data for query ID {query_id} with optimistic delay {optimistic_delay} max attestation age {max_attestation_age} max data age {max_data_age} min stake percentage {min_stake_percentage} last relayed timestamp {last_relayed_timestamp}")
+    logger.debug(
+        "Getting oracle data optimized query_id=%s optimistic_delay_s=%s max_attestation_age_s=%s max_data_age_s=%s min_stake_pct=%s last_relayed_ts_ms=%s",
+        query_id,
+        optimistic_delay,
+        max_attestation_age,
+        max_data_age,
+        min_stake_percentage,
+        last_relayed_timestamp,
+    )
     ADD_A_TIP = "Add a tip."
     # get latest attestation data
     attest_data, e = get_attestation_data_before(query_id, int(time.time()) * 1000)
@@ -84,12 +94,22 @@ def get_oracle_data_optimized(query_id, optimistic_delay=900, max_attestation_ag
     opt_ts_ms = int(time.time() - optimistic_delay) * 1000 # optimistic timestamp
     if attest_data["last_consensus_timestamp"] == attest_data["timestamp"]:
         # is consensus
-        logger.debug("Latest report is consensus")
+        logger.info(
+            "Oracle selection: consensus report query_id=%s report_ts_ms=%s age_s=%.1f",
+            query_id,
+            int(attest_data.get("timestamp", 0)),
+            (int(time.time() * 1000) - int(attest_data.get("timestamp", 0))) / 1000.0,
+        )
     elif int(attest_data["last_consensus_timestamp"]) > opt_ts_ms:
         # last consensus timestamp is more recent than optimistic timestamp, use last consensus timestamp report
         # this report should never be too old, since MAX_DATA_AGE > OPTIMISTIC_DELAY
         # it should never be older than the last relayed timestamp. but it could be equal to it.
-        logger.debug("Latest report is not consensus, but last consensus timestamp is less than optimistic delay")
+        logger.info(
+            "Oracle selection: last-consensus report query_id=%s last_consensus_ts_ms=%s opt_cutoff_ts_ms=%s",
+            query_id,
+            int(attest_data.get("last_consensus_timestamp", 0)),
+            opt_ts_ms,
+        )
         if int(attest_data["last_consensus_timestamp"]) <= last_relayed_timestamp:
             # if any optimistic data exists between last_relayed_timestamp and now, we should just exit and relay it once it's
             # older than the optimistic timestamp, since we don't want to keep tipping for optimistic data that we can't immediately relay
@@ -106,7 +126,12 @@ def get_oracle_data_optimized(query_id, optimistic_delay=900, max_attestation_ag
             return None, e
     else:
         # no consensus, get data before now - optimistic_delay
-        logger.debug("Latest report is not consensus, and last consensus timestamp is older than optimistic delay")
+        logger.info(
+            "Oracle selection: optimistic report query_id=%s opt_cutoff_ts_ms=%s last_consensus_ts_ms=%s",
+            query_id,
+            opt_ts_ms,
+            int(attest_data.get("last_consensus_timestamp", 0)),
+        )
         attest_data, e = get_attestation_data_before(query_id, opt_ts_ms)
         if e:
             logger.error(f"Error getting attestation data before {opt_ts_ms}: {e}")
@@ -134,7 +159,14 @@ def get_oracle_data_optimized(query_id, optimistic_delay=900, max_attestation_ag
     # check attestation age
     if int(time.time()) * 1000 - int(attest_data["attestation_timestamp"]) > max_attestation_age * 1000:
         # attestation is too old, request new attestations
-        logger.warning("Attestation is too old, requesting new attestations")
+        att_age_s = (int(time.time()) * 1000 - int(attest_data["attestation_timestamp"])) / 1000.0
+        logger.warning(
+            "Attestation is too old, requesting new attestations query_id=%s report_ts_ms=%s attestation_age_s=%.1f max_attestation_age_s=%s",
+            query_id,
+            int(attest_data.get("timestamp", 0)),
+            att_age_s,
+            max_attestation_age,
+        )
         layer_status, e = get_layer_connection_status()
         if e:
             return None, e
@@ -469,6 +501,36 @@ def get_current_price_from_api() -> tuple[float, Exception]:
     """
     Get the current price from the API or Layer chain
     """
+    # Prefer telliot-feeds if configured (SpotPrice only for now)
+    if (os.getenv("PRICE_SOURCE") or "").lower() == "telliot-feeds":
+        try:
+            from src.telliot_feeds_price import fetch_spot_price_from_telliot_feeds
+            import asyncio
+
+            query_id = os.getenv("QUERY_ID") or ""
+            query_data = os.getenv("QUERY_DATA") or ""
+            if query_id and query_data:
+                coro = fetch_spot_price_from_telliot_feeds(query_id_hex=query_id, query_data_hex=query_data)
+                try:
+                    price, err = asyncio.run(coro)
+                except RuntimeError:
+                    # Handle "asyncio.run() cannot be called from a running event loop"
+                    loop = asyncio.new_event_loop()
+                    try:
+                        price, err = loop.run_until_complete(coro)
+                    finally:
+                        loop.close()
+                if err is None and price is not None:
+                    logger.debug(f"Price from telliot-feeds: {price}")
+                    return price, None
+                if err is not None:
+                    # Include stacktrace when possible for debugging integration issues
+                    logger.exception("telliot-feeds price fetch failed", exc_info=err)
+            else:
+                logger.warning("telliot-feeds enabled but QUERY_ID/QUERY_DATA not set")
+        except Exception as e:
+            logger.exception(f"telliot-feeds price fetch error: {e}")
+
     # Prefer price-service if configured
     try:
         price, svc_err = get_price_from_service()
@@ -517,7 +579,7 @@ def get_current_price_from_api() -> tuple[float, Exception]:
         
         # Decode price from oracle data
         value_hex = oracle_data["attestation_data"]["aggregate_value"]
-        value_bytes = bytes.fromhex(value_hex)
+        value_bytes = decode_hex(value_hex)
         value_decoded = decode(["uint256"], value_bytes)
         return float(value_decoded[0])/10**18, None
     except Exception as e:
@@ -536,6 +598,7 @@ def get_oracle_proof_from_layer(query_id: str, timestamp: int) -> tuple[dict, Ex
         return None, error
     
     # request new attestations
+    logger.info("Checkpoint mismatch; requesting attestations query_id=%s ts_ms=%s", query_id, timestamp)
     chain_id, e = get_layer_chain_id()
     if e:
         return None, e
@@ -543,9 +606,36 @@ def get_oracle_proof_from_layer(query_id: str, timestamp: int) -> tuple[dict, Ex
     e = request_attestations(query_id, timestamp, os.getenv("LAYER_TX_CREATOR_ADDRESS"), os.getenv("LAYER_RPC_ENDPOINT"), chain_id)
     if e:
         return None, e
-    sleep(5)
+    # Attestations/checkpoint can take a couple blocks; poll quickly then back off.
+    fast_attempts = int(os.getenv("ATTESTATION_FAST_ATTEMPTS", "8"))
+    fast_sleep = float(os.getenv("ATTESTATION_FAST_SLEEP", "0.5"))
+    max_sleep = float(os.getenv("ATTESTATION_MAX_SLEEP", "5"))
+    timeout = float(os.getenv("ATTESTATION_WAIT_TIMEOUT", "30"))
 
-    return get_oracle_proof(query_id, timestamp)
+    def _try_get_proof():
+        proof, err = get_oracle_proof(query_id, timestamp)
+        if err is None:
+            return proof
+        # retry only on expected transient errors
+        err_s = str(err)
+        if err_s in ("layer_client: Checkpoint mismatch", "layer_client: Insufficient attestation power"):
+            return None
+        raise err
+
+    try:
+        proof = poll_with_backoff(
+            _try_get_proof,
+            fast_attempts=fast_attempts,
+            fast_sleep=fast_sleep,
+            max_sleep=max_sleep,
+            timeout=timeout,
+            description="oracle proof after requesting attestations",
+        )
+        return proof, None
+    except TimeoutError as te:
+        return None, Exception(str(te))
+    except Exception as e:
+        return None, e
 
 def get_latest_oracle_proof_from_layer(query_id: str) -> tuple[dict, Exception]:
     """

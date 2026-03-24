@@ -5,14 +5,13 @@ from src.relayer import start_relayer, update_user_oracle_data, data_bridge_init
 from src.threshold_relayer import start_primary_threshold_relayer, start_backup_threshold_relayer
 from src.bridge_client import relay_withdraw
 from src.evm_client import EVMClient
-from src.layer_scraper import scrape_layer
-from src.report import generate_power_report
 from src.logger_utils import setup_logging
 from src.logger_utils import get_logger
 from src.valset_relayer import start_valset_relayer
 from src.query_parser import QueryParser
 from src.config_loader import load_config, apply_env, build_default_map
 from src.price_service import run_price_service
+from eth_utils import decode_hex
 
 logger = get_logger(__name__)
 
@@ -271,11 +270,23 @@ def update(query_id, query_string, contract_type, verbose, no_color):
 @click.option('--layer-swagger', envvar='LAYER_SWAGGER_ENDPOINT', required=True, help='Layer swagger endpoint')
 @click.option('--layer-rpc', envvar='LAYER_RPC_ENDPOINT', required=True, help='Layer RPC endpoint')
 @click.option('--data-bridge-address', envvar='DATA_BRIDGE_ADDRESS', required=True, help='Tellor data bridge contract address')
-@click.option('--token-bridge-address', envvar='TOKEN_BRIDGE_ADDRESS', required=True, help='Token Bridge contract address')
+@click.option('--token-bridge-address', envvar='TOKEN_BRIDGE_ADDRESS', help='Token Bridge V2 contract address (default when not using --legacy)')
+@click.option('--token-bridge-legacy-address', envvar='TOKEN_BRIDGE_LEGACY_ADDRESS', help='Token Bridge V1 contract address (only used with --legacy)')
 @click.option('--layer-tx-creator-address', envvar='LAYER_TX_CREATOR_ADDRESS', required=True, help='Local keyring address used for creating transactions on layer')
-def relay_bridge(withdraw_id, eth_private_key, web3_provider, evm_network, layer_swagger, layer_rpc, data_bridge_address, token_bridge_address, layer_tx_creator_address, verbose, no_color):
-    """Relay a specific withdraw from Layer to EVM chain"""
+@click.option('--legacy', is_flag=True, help='Relay to legacy TokenBridge V1 (TRBBridge query type, uses TOKEN_BRIDGE_LEGACY_ADDRESS)')
+@click.option('--reverify', is_flag=True, help='Call TokenBridgeV2.reverifyExtraWithdraw for an existing withdraw with pending amount')
+def relay_bridge(withdraw_id, eth_private_key, web3_provider, evm_network, layer_swagger, layer_rpc, data_bridge_address, token_bridge_address, token_bridge_legacy_address, layer_tx_creator_address, legacy, reverify, verbose, no_color):
+    """Relay a withdraw from Layer to EVM (default: V2 withdrawFromLayer). Use --legacy for V1 bridge, --reverify for reverifyExtraWithdraw."""
     configure_logging(verbose=verbose, no_color=no_color)
+    if legacy and reverify:
+        logger.error("Cannot use both --legacy and --reverify")
+        exit(1)
+    if legacy and not token_bridge_legacy_address:
+        logger.error("TOKEN_BRIDGE_LEGACY_ADDRESS (or --token-bridge-legacy-address) is required when using --legacy")
+        exit(1)
+    if not legacy and not token_bridge_address:
+        logger.error("TOKEN_BRIDGE_ADDRESS (or --token-bridge-address) is required for V2 relay (default or --reverify)")
+        exit(1)
     os.environ['ETH_PRIVATE_KEY'] = to_checksum_address(eth_private_key)
     if web3_provider:
         os.environ['WEB3_PROVIDER_URL'] = web3_provider
@@ -284,58 +295,16 @@ def relay_bridge(withdraw_id, eth_private_key, web3_provider, evm_network, layer
     os.environ['LAYER_SWAGGER_ENDPOINT'] = layer_swagger
     os.environ['LAYER_RPC_ENDPOINT'] = layer_rpc
     os.environ['DATA_BRIDGE_ADDRESS'] = to_checksum_address(data_bridge_address)
-    os.environ['TOKEN_BRIDGE_ADDRESS'] = to_checksum_address(token_bridge_address)
+    if token_bridge_address:
+        os.environ['TOKEN_BRIDGE_ADDRESS'] = to_checksum_address(token_bridge_address)
+    if token_bridge_legacy_address:
+        os.environ['TOKEN_BRIDGE_LEGACY_ADDRESS'] = to_checksum_address(token_bridge_legacy_address)
     os.environ['LAYER_TX_CREATOR_ADDRESS'] = layer_tx_creator_address
 
-    _, error = relay_withdraw(withdraw_id)
+    _, error = relay_withdraw(withdraw_id, legacy=legacy, reverify=reverify)
     if error:
         logger.error(f"Error relaying withdraw: {error}")
         exit(1)
-
-@cli.command()
-@add_logging_options
-@click.option('--query-id', envvar='QUERY_ID', help='Query ID to scrape (alternative to --query-string)')
-@click.option('--query-string', envvar='QUERY_STRING', help='Query string like "SpotPrice(eth,usd)" (alternative to --query-id)')
-@click.option('--scrape-count', type=int, default=1000, help='Number of data points to scrape')
-@click.option('--output-file', envvar='LAYER_DATA_CSV', default="data/layer_data.csv", help='Output CSV file path')
-@click.option('--scrape-micro', is_flag=True, help='Scrape micro reports after aggregate data')
-def scrape(query_id, query_string, scrape_count, output_file, scrape_micro, verbose, no_color):
-    """Scrape historical data from Layer chain"""
-    configure_logging(verbose=verbose, no_color=no_color)
-    
-    # validate that either query_id or query_string is provided
-    if not query_id and not query_string:
-        logger.error("Either --query-id or --query-string must be provided")
-        exit(1)
-    
-    # parse query string if provided
-    final_query_id, final_query_data = parse_query_string_if_provided(query_string, query_id, None)
-    
-    # Set environment variables
-    os.environ['QUERY_ID'] = final_query_id
-    os.environ['SCRAPE_COUNT'] = str(scrape_count)
-    os.environ['LAYER_DATA_CSV'] = output_file
-
-    logger.info(f"Scraping layer data to {output_file}")
-
-    scrape_layer(final_query_id, output_file, scrape_count, scrape_micro)
-
-@cli.command()
-@add_logging_options
-@click.option('--input-file', envvar='LAYER_DATA_CSV', default="data/layer_data.csv", help='Input CSV file path')
-@click.option('--terminal-plot', is_flag=True, help='Show plot in terminal')
-@click.option('--micro', is_flag=True, help='Analyze micro reports')
-@click.option('--assume-all', is_flag=True, default=False, help='Assume all reporters existed from the beginning')
-def report(input_file, terminal_plot, micro, assume_all, verbose, no_color):
-    """Generate reports from scraped data"""
-    configure_logging(verbose=verbose, no_color=no_color)
-    if not os.path.exists(input_file):
-        logger.error(f"Input file {input_file} does not exist")
-        return
-    
-    logger.info(f"Generating reports from {input_file}")
-    _ = generate_power_report(input_file, show_terminal_plot=terminal_plot, micro_report=micro, assume_all_existed_from_start=assume_all)
-    logger.info("\nReport generated in reports/power_vs_height.png")
 
 @cli.command()
 @add_logging_options
@@ -400,6 +369,7 @@ def relay_threshold(query_id, query_data, query_string, sleep_time, price_thresh
                     min_stake_percentage, offset, backup, verbose, no_color):
     """Start the threshold relayer process (heartbeat + price threshold)"""
     configure_logging(verbose=verbose, no_color=no_color)
+    logger.info(f"Starting threshold relayer")
     
     # validate that either query_id/query_data or query_string is provided
     if query_string:
@@ -503,18 +473,14 @@ def parse_query(query_string, verbose, no_color):
         query_data_hex = query_info['queryData']
         if query_data_hex.startswith('0x'):
             query_data_hex = query_data_hex[2:]
-            
-        query_id_bytes = bytes.fromhex(query_id_hex)
-        query_data_bytes = bytes.fromhex(query_data_hex)
+        query_id_bytes = decode_hex(query_id_hex)
+        query_data_bytes = decode_hex(query_data_hex)
         print(f"\n📊 Additional Info:")
         print(f"   Query ID length: {len(query_id_bytes)} bytes")
         print(f"   Query Data length: {len(query_data_bytes)} bytes")
         
     except Exception as e:
         logger.error(f"❌ Error parsing query string: {e}")
-        print(f"\n💡 Examples of valid query strings:")
-        print(f"   SpotPrice(eth,usd)")
-        print(f"   CustomType(uint256 123, string 'hello world', bool true)")
         exit(1)
 
 if __name__ == '__main__':

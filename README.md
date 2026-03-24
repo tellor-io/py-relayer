@@ -1,146 +1,133 @@
 # Layer Relayer
 
-Relayers for Tellor Layer that synchronize validator sets, relay oracle data to EVM chains, and relay token-bridge withdrawals. Includes a threshold relayer driven by heartbeat and external price-change thresholds, and a shared HTTP price-service supporting batched provider queries.
+Relayers for Tellor Layer that:
+- relay oracle values from Layer to EVM (`relay-threshold`)
+- relay bridge withdrawals from Layer to EVM (`relay-bridge`)
+- sync validator sets (`relay-valset`)
+- manage bridge contract lifecycle (`init`, `reset`)
+
+This repo is config-driven via `configs/` and is operated with `telliot-feeds` as the price source.
 
 ## Setup
 
-We assume you have python installed. Note, if you are running on ubuntu, see the additional requirements below.
-
-1. Clone the repo:
+1. Create and activate a Python virtual environment:
 ```bash
-git clone https://github.com/tellor-io/py-relayer.git
+python3.12 -m venv venv3.12
+source venv3.12/bin/activate
 ```
 
-2. Navigate to the repository directory:
-```bash
-cd py-relayer
-```
-
-3. Create a virtual environment:
-```bash
-python3 -m venv venv
-source venv/bin/activate
-```
-
-4. Install the dependencies:
+2. Install dependencies and the CLI:
 ```bash
 pip install -r requirements.txt
+pip install -e .
 ```
 
-5. Copy the .env.example file to .env and set the appropriate environment variables:
+3. Copy `.env.example` to `.env` and fill in required secrets:
 ```bash
 cp .env.example .env
 ```
 
-All .env variables can alternatively be set through the CLI. We recommend setting your ethereum private key in the .env file for security reasons. For convenience, you should set any parameters which tend to remain constant across runs in the .env file. CLI arguments will override .env variables.
+CLI flags override config values, and config values override `.env`.
 
-### Additional Requirements for Ubuntu
+## Commands In Use
 
-If you are running the relayer on ubuntu, you may need to install additional tools:
+The commands currently used in operations are:
+- `init`
+- `parse-query`
+- `relay-bridge`
+- `relay-threshold`
+- `relay-valset`
+- `reset`
 
-```bash
-sudo apt update
-sudo apt install build-essential python3-dev
-```
+## Config-First Workflow
 
-After installing these dependencies, proceed with the setup instructions above.
+The relayer relies heavily on the config system:
+- Config files live in `configs/`
+- Inheritance uses `extends = [...]`
+- `[env]` sets environment variables
+- `[commands.<command>]` sets per-command defaults
 
-## Usage
+You can pass `--config` as:
+- a config name (`sepolia-shared`)
+- a nested config name (`sepolia/eth-usd`)
+- or a path (`configs/sepolia/eth-usd.toml`)
 
-The CLI provides the following commands:
+### Config example
 
-### Simple Oracle Relayer (interval-based)
-```bash
-relayer relay --query-string "SpotPrice(eth,usd)" \
-  --data-bridge-address <DATA_BRIDGE> \
-  --layer-user-address <USER_CONTRACT> \
-  --web3-provider <RPC> --layer-swagger <LAYER_API> --layer-rpc <LAYER_RPC> \
-  --sleep-time 900 --fixed-interval
-```
-
-### Token Bridge Withdraw Relayer
-```bash
-relayer relay-bridge --data-bridge-address 0xa73Efa04476B45E5bBAa68A59f7Ee2A21e14FDD4 --token-bridge-address 0x6ac02F3887B358591b8B2D22CfB1F36Fa5843867 --withdraw-id 8
-```
-
-### Initialize Data Bridge
-This calls the data bridge `init` function to set the initial validator set. The `init` function can only be called by the contract deployer, and only once.
-```bash
-relayer init
-```
-
-### Reset Data Bridge
-This allows the bridge guardian to reset the validator set, if and only if the validator set is stale (21 days old).
-```bash
-relayer reset
-```
-
-### Threshold Relayer (Primary)
-Heartbeat + price-threshold driven relayer to `TellorDataBank`. Uses external price(s) from the price-service (if configured), else falls back to a single `PRICE_API_URL`, else Layer aggregate.
-```bash
-relayer relay-threshold --query-string "SpotPrice(eth,usd)" --price-threshold 0.01 \
-  --data-bridge-address <DATA_BRIDGE> --layer-user-address <DATABANK> \
-  --web3-provider <RPC> --layer-swagger <LAYER_API> --layer-rpc <LAYER_RPC> \
-  --layer-tx-creator-address <LAYER_ADDR>
-```
-
-### Threshold Relayer (Backup)
-Conservative gates and higher thresholds/heartbeat.
-```bash
-relayer relay-threshold --backup --query-string "SpotPrice(eth,usd)" --price-threshold 0.015 \
-  --data-bridge-address <DATA_BRIDGE> --layer-user-address <DATABANK> \
-  --web3-provider <RPC> --layer-swagger <LAYER_API> --layer-rpc <LAYER_RPC> \
-  --layer-tx-creator-address <LAYER_ADDR>
-```
-
-### Validator Set Relayer
-Sync the EVM bridge validator set to Layer periodically (no oracle relay):
-```bash
-relayer relay-valset --data-bridge-address <DATA_BRIDGE> \
-  --web3-provider <RPC> --layer-swagger <LAYER_API> --layer-rpc <LAYER_RPC> \
-  --sleep-time 900 --fixed-interval
-```
-
-### Price Service
-Run a shared HTTP price-service that batches/caches external provider calls (CoinGecko, CoinMarketCap, CoinPaprika, Coinbase, Curve price API):
-```bash
-# defaults to configs/price-service.toml
-relayer price-service
-
-# or explicit
-PRICE_SERVICE_CONFIG=configs/price-service.toml ./venv/bin/python -m src.cli price-service --host 0.0.0.0 --port 8787
-```
-
-Endpoints:
-- GET /price?feed=eth-usd[&agg=median&required=1]
-- GET /batch?feeds=eth-usd,btc-usd[&agg=trimmed_mean:0.1]
-
-### Config System (TOML)
-Configs live under `configs/`, support inheritance via `extends`, and provide both environment variables (`[env]`) and per-command defaults (`[commands.<name>]`). Example:
 ```toml
-extends = ["saga-shared"]
+extends = ["sepolia-shared"]
 
 [env]
 FEED_NAME = "eth-usd"
-PRICE_SERVICE_URL = "http://127.0.0.1:8787"
+PRICE_SOURCE = "telliot-feeds"
 
 [commands.relay-threshold]
 query_string = "SpotPrice(eth,usd)"
-price_threshold = 0.01
+price_threshold = 0.02
 ```
 
-Per-network shared configs: `saga-shared.toml`, `sepolia-shared.toml`. Feed configs: `configs/<network>/<feed>.toml` (templates included for ETH/BTC/USDC/USDT/TBTC/wstETH/rETH/stATOM).
+## Relay Examples (Current)
 
-When using configs:
 ```bash
-relayer --config saga/eth-usd relay-threshold --eth-private-key 0x...
+relayer --config sepolia/eth-usd relay-threshold
 ```
 
-### Help
 ```bash
-relayer --help
-relayer relay --help
-relayer relay-threshold --help
-relayer relay-bridge --help
-relayer relay-valset --help
+relayer --config sepolia-shared relay-bridge --withdraw-id 1
 ```
+
+## Command Quick Reference
+
+### `relay-threshold`
+
+Primary oracle relayer (heartbeat + threshold logic), typically run with feed configs such as `sepolia/eth-usd`.
+
+```bash
+relayer --config sepolia/eth-usd relay-threshold
+```
+
+### `relay-bridge`
+
+Relays a withdrawal from Layer to EVM.
+
+```bash
+relayer --config sepolia-shared relay-bridge --withdraw-id 1
+```
+
+### `relay-valset`
+
+Relays validator set updates.
+
+```bash
+relayer --config sepolia-shared relay-valset
+```
+
+### `init`
+
+Initializes the data bridge contract (one-time deployer action).
+
+```bash
+relayer --config sepolia-shared init
+```
+
+### `reset`
+
+Guardian reset for stale validator set scenarios.
+
+```bash
+relayer --config sepolia-shared reset
+```
+
+### `parse-query`
+
+Parses a query string and prints query metadata (`queryId`, `queryData`, parsed args).
+
+```bash
+relayer parse-query --query-string "SpotPrice(eth,usd)"
+```
+
+## Notes
+
+- `price-service` is not part of the active operational workflow.
+- Use `telliot-feeds` via config (`PRICE_SOURCE=telliot-feeds`) for threshold relaying.
+- See `configs/README.md` for additional config examples.
