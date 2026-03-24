@@ -1,0 +1,14 @@
+extends = ["saga-shared"]
+
+[env]
+FEED_NAME = "yeth-usd"
+
+[commands.relay-threshold]
+query_string = "SpotPrice(yeth,usd)"
+sleep_time = 18000
+check_interval = 900
+backup = true
+price_threshold = 0.03
+offset = 80
+
+
