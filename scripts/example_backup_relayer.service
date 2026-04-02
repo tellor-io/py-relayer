@@ -1,0 +1,15 @@
+[Unit]
+Description=py-relayer for SAGA Chain
+After=network.target
+
+[Service]
+Type=oneshot
+User=USERNAME
+Group=USERNAME
+WorkingDirectory=/PATH/TO/py-relayer
+Environment="TERM=xterm"
+ExecStart=/bin/bash -c "source /PATH/TO/py-relayer/venv/bin/activate && /scripts/backup_start_all_feeds_toml.sh saga-backup"
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

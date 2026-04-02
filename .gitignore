@@ -7,3 +7,4 @@ data/
 reports/
 logs/
 venv3.12/
+env/

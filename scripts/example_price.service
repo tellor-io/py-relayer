@@ -1,0 +1,16 @@
+[Unit]
+Description=py-relayer price service
+After=network.target
+
+[Service]
+Type=simple
+User=USERNAME
+Group=USERNAME
+WorkingDirectory=/PATH/TO/py-relayer
+Environment=PATH=/home/USERNAME/.local/bin
+ExecStart=/bin/bash -c "source env/bin/activate && relayer price-service"
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

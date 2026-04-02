@@ -1,0 +1,12 @@
+extends = ["sepolia-shared"]
+
+[env]
+FEED_NAME = "btc-usd"
+
+[commands.relay-threshold]
+query_string = "SpotPrice(btc,usd)"
+sleep_time = 18000
+check_interval = 900
+backup = true
+price_threshold = 0.02
+offset = 0
