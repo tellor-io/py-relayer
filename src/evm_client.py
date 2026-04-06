@@ -84,7 +84,7 @@ def send_transaction_with_retry(
             
             tx = contract_function.build_transaction(tx_params)
             signed_tx = web3_instance.eth.account.sign_transaction(tx, private_key=web3_acct.key)
-            tx_hash = web3_instance.eth.send_raw_transaction(signed_tx.raw_transaction)
+            tx_hash = web3_instance.eth.send_raw_transaction(getattr(signed_tx, "raw_transaction", None) or signed_tx.rawTransaction)
             
             logger.info(f"Transaction submitted successfully on attempt {attempt + 1} with nonce {current_nonce}")
             return tx_hash, None
@@ -320,7 +320,7 @@ class EVMClient:
             logger.debug(f"Signed transaction: {signed_tx}")
 
             # Send the transaction
-            tx_hash = self.web3_instance.eth.send_raw_transaction(signed_tx.raw_transaction)
+            tx_hash = self.web3_instance.eth.send_raw_transaction(getattr(signed_tx, "raw_transaction", None) or signed_tx.rawTransaction)
             logger.info(f"Tx hash: {tx_hash.hex()}")
             
             # Wait for receipt and check success
@@ -480,7 +480,7 @@ class EVMClient:
             })
             logger.info(f"Tx: {tx}")
             signed_tx = self.web3_instance.eth.account.sign_transaction(tx, private_key=self.web3_acct.key)
-            tx_hash = self.web3_instance.eth.send_raw_transaction(signed_tx.raw_transaction)
+            tx_hash = self.web3_instance.eth.send_raw_transaction(getattr(signed_tx, "raw_transaction", None) or signed_tx.rawTransaction)
             logger.info(f"Tx hash: {tx_hash.hex()}")
             
             # Wait for receipt and check success
@@ -510,7 +510,7 @@ class EVMClient:
             })
             logger.info(f"Tx: {tx}")
             signed_tx = self.web3_instance.eth.account.sign_transaction(tx, private_key=self.web3_acct.key)
-            tx_hash = self.web3_instance.eth.send_raw_transaction(signed_tx.raw_transaction)
+            tx_hash = self.web3_instance.eth.send_raw_transaction(getattr(signed_tx, "raw_transaction", None) or signed_tx.rawTransaction)
             logger.info(f"Tx hash: {tx_hash.hex()}")
             
             # Wait for receipt and check success
@@ -540,7 +540,7 @@ class EVMClient:
                 'gasPrice': int(self.web3_instance.eth.gas_price * 1.25)
             })
             signed_tx = self.web3_instance.eth.account.sign_transaction(tx, self.web3_acct.key)
-            tx_hash = self.web3_instance.eth.send_raw_transaction(signed_tx.raw_transaction)
+            tx_hash = self.web3_instance.eth.send_raw_transaction(getattr(signed_tx, "raw_transaction", None) or signed_tx.rawTransaction)
             logger.info(f"Withdraw tx hash: {tx_hash.hex()}")
 
             # Wait for receipt and check success
@@ -571,7 +571,7 @@ class EVMClient:
                 'gasPrice': int(self.web3_instance.eth.gas_price * 1.25)
             })
             signed_tx = self.web3_instance.eth.account.sign_transaction(tx, self.web3_acct.key)
-            tx_hash = self.web3_instance.eth.send_raw_transaction(signed_tx.raw_transaction)
+            tx_hash = self.web3_instance.eth.send_raw_transaction(getattr(signed_tx, "raw_transaction", None) or signed_tx.rawTransaction)
             logger.info(f"Reverify extra withdraw tx hash: {tx_hash.hex()}")
 
             success, _ = self.wait_for_transaction_receipt_and_log(tx_hash, "Reverify extra withdraw")

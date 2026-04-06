@@ -1,4 +1,4 @@
-from src.layer_client import strip_0x, get_minimum_gas_prices, get_oracle_module_params
+from src.layer_client import strip_0x, get_minimum_gas_prices, get_oracle_module_params, get_layer_chain_id
 from src.logger_utils import get_logger
 import subprocess
 import time
@@ -31,7 +31,7 @@ def is_sequence_error(error_output) -> bool:
     
     return any(pattern in error_str for pattern in sequence_error_patterns)
 
-def get_account_sequence(layer_address, layer_rpc_endpoint, chain_id="layertest-4"):
+def get_account_sequence(layer_address, layer_rpc_endpoint, chain_id="layertest-5"):
     """
     Get the current sequence number for an account.
     
@@ -67,8 +67,56 @@ def get_account_sequence(layer_address, layer_rpc_endpoint, chain_id="layertest-
         logger.error(f"Unexpected error getting account sequence: {e}")
         return None, Exception(f"Unexpected error getting account sequence: {e}")
 
+def verify_layer_transaction(txhash, layer_rpc_endpoint, chain_id, retries=5, poll_delay=3.0):
+    """
+    Poll the node until a broadcasted transaction is found and check its result code.
+
+    Returns:
+        tuple: (success: bool, error: Exception or None)
+            success=True only when the tx is found on-chain with code 0.
+    """
+    for attempt in range(retries):
+        time.sleep(poll_delay)
+        try:
+            result = subprocess.run(
+                ["layerd", "query", "tx", txhash,
+                 "--node=" + layer_rpc_endpoint,
+                 "--output", "json"],
+                capture_output=True,
+                text=True,
+            )
+            raw = result.stdout.strip()
+            logger.debug(f"Tx query stdout: {raw}")
+            if result.stderr.strip():
+                logger.debug(f"Tx query stderr: {result.stderr.strip()}")
+
+            if not raw:
+                logger.info(f"Tx {txhash} not yet found on attempt {attempt + 1}/{retries}, retrying...")
+                continue
+
+            tx_data = json.loads(raw)
+            code = tx_data.get("code", 0)
+            raw_log = tx_data.get("raw_log", "")
+            height = tx_data.get("height", "?")
+
+            if code == 0:
+                logger.info(f"Tx {txhash} confirmed on-chain at height {height}")
+                return True, None
+            else:
+                logger.error(f"Tx {txhash} included at height {height} but FAILED with code {code}: {raw_log}")
+                return False, Exception(f"Transaction on-chain failure (code {code}): {raw_log}")
+
+        except json.JSONDecodeError:
+            logger.debug(f"Non-JSON response for tx query (attempt {attempt + 1}): {result.stdout[:200]}")
+        except Exception as e:
+            logger.debug(f"Error querying tx {txhash} (attempt {attempt + 1}): {e}")
+
+    logger.warning(f"Tx {txhash} not confirmed after {retries} poll attempts — it may still be pending or was dropped")
+    return False, Exception(f"Transaction {txhash} not found on-chain after {retries} attempts")
+
+
 def send_layer_transaction_with_sequence_retry(command_args, operation_name, layer_address, 
-                                             layer_rpc_endpoint, chain_id="layertest-4",
+                                             layer_rpc_endpoint, chain_id="layertest-5",
                                              max_retries=5, base_delay=1.0, max_delay=60.0, jitter=True):
     """
     Send a Layer transaction with sequence-aware retry logic.
@@ -108,10 +156,20 @@ def send_layer_transaction_with_sequence_retry(command_args, operation_name, lay
                 text=True,
                 check=True
             )
-            txhash = result.stdout.split("txhash: ")[1].split("\n")[0]
-            logger.info(f"Layer transaction successful on attempt {attempt + 1} for {operation_name}. Txhash: {txhash}")
-            logger.debug(f"Transaction output: {result.stdout}")
-            return True, result, None
+            logger.debug(f"layerd stdout: {result.stdout}")
+            if result.stderr.strip():
+                logger.debug(f"layerd stderr: {result.stderr.strip()}")
+
+            txhash = result.stdout.split("txhash: ")[1].split("\n")[0].strip()
+            logger.info(f"Transaction broadcast for {operation_name} on attempt {attempt + 1}. Txhash: {txhash}")
+
+            confirmed, verify_error = verify_layer_transaction(txhash, layer_rpc_endpoint, chain_id)
+            if confirmed:
+                logger.info(f"Layer transaction confirmed on-chain for {operation_name}. Txhash: {txhash}")
+                return True, result, None
+            else:
+                logger.error(f"Layer transaction not confirmed for {operation_name}: {verify_error}")
+                return False, None, verify_error
             
         except subprocess.CalledProcessError as e:
             last_error = e
@@ -141,7 +199,7 @@ def send_layer_transaction_with_sequence_retry(command_args, operation_name, lay
     logger.error(f"Layer transaction failed after {max_retries + 1} attempts for {operation_name}. Last error: {last_error}")
     return False, None, Exception(f"Transaction failed after {max_retries + 1} attempts: {last_error}")
 
-def tip(query_data, layer_address, layer_rpc_endpoint, chain_id="layertest-4") -> Exception:
+def tip(query_data, layer_address, layer_rpc_endpoint, chain_id=None) -> Exception:
     """
     Tip for oracle data with retry logic for sequence conflicts.
     
@@ -149,7 +207,7 @@ def tip(query_data, layer_address, layer_rpc_endpoint, chain_id="layertest-4") -
         query_data: The query data to tip for
         layer_address: The Layer address to use
         layer_rpc_endpoint: The Layer RPC endpoint
-        chain_id: The chain ID
+        chain_id: The chain ID (auto-detected from the node when not provided)
     
     Returns:
         Exception: None on success, Exception on failure
@@ -159,7 +217,16 @@ def tip(query_data, layer_address, layer_rpc_endpoint, chain_id="layertest-4") -
     query_data_stripped = strip_0x(str(query_data))
     layer_address_str = str(layer_address)
     layer_rpc_endpoint_str = str(layer_rpc_endpoint)
-    chain_id_str = str(chain_id)
+
+    if not chain_id:
+        detected_chain_id, e = get_layer_chain_id()
+        if e or not detected_chain_id:
+            logger.warning(f"Could not auto-detect chain ID: {e}. Falling back to layertest-5")
+            detected_chain_id = "layertest-5"
+        chain_id_str = detected_chain_id
+        logger.info(f"Auto-detected chain ID: {chain_id_str}")
+    else:
+        chain_id_str = str(chain_id)
     gas_price = minimum_gas_prices()
     min_tip_amount = minimum_tip_amount()
 
@@ -199,7 +266,7 @@ def tip(query_data, layer_address, layer_rpc_endpoint, chain_id="layertest-4") -
     
     return None
 
-def request_attestations(query_id, timestamp, layer_address, layer_rpc_endpoint, chain_id="layertest-4") -> Exception:
+def request_attestations(query_id, timestamp, layer_address, layer_rpc_endpoint, chain_id="layertest-5") -> Exception:
     """
     Request attestations with retry logic for sequence conflicts.
     
