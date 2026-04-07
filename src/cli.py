@@ -4,6 +4,7 @@ import os
 from src.relayer import start_relayer, update_user_oracle_data, data_bridge_init, data_bridge_reset
 from src.threshold_relayer import start_primary_threshold_relayer, start_backup_threshold_relayer
 from src.bridge_client import relay_withdraw
+from src.layer_tx_client import tip as layer_tip
 from src.evm_client import EVMClient
 from src.logger_utils import setup_logging
 from src.logger_utils import get_logger
@@ -304,6 +305,20 @@ def relay_bridge(withdraw_id, eth_private_key, web3_provider, evm_network, layer
     _, error = relay_withdraw(withdraw_id, legacy=legacy, reverify=reverify)
     if error:
         logger.error(f"Error relaying withdraw: {error}")
+        exit(1)
+
+@cli.command()
+@add_logging_options
+@click.argument('query_data')
+@click.option('--layer-rpc', envvar='LAYER_RPC_ENDPOINT', required=True, help='Layer RPC endpoint')
+@click.option('--layer-tx-creator-address', envvar='LAYER_TX_CREATOR_ADDRESS', required=True, help='Local keyring address used for creating transactions on layer')
+@click.option('--chain-id', envvar='CHAIN_ID', default=None, help='Layer chain ID (auto-detected from node when not set)')
+def tip(query_data, layer_rpc, layer_tx_creator_address, chain_id, verbose, no_color):
+    """Submit an oracle tip for a given query data."""
+    configure_logging(verbose=verbose, no_color=no_color)
+    error = layer_tip(query_data, layer_tx_creator_address, layer_rpc, chain_id)
+    if error:
+        logger.error(f"Error tipping: {error}")
         exit(1)
 
 @cli.command()

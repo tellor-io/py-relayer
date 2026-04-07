@@ -80,6 +80,17 @@ def setup_logging(verbose=False, no_color=False):
     for handler in root_logger.handlers:
         handler.setLevel(level)
 
+    # Clamp noisy third-party libraries to WARNING so they never drown out
+    # application logs, even when --verbose is set.
+    for noisy_logger in (
+        "web3",
+        "web3.RequestManager",
+        "web3.providers.HTTPProvider",
+        "urllib3",
+        "urllib3.connectionpool",
+    ):
+        logging.getLogger(noisy_logger).setLevel(logging.WARNING)
+
 def get_logger(module_name):
     """Get a logger for a specific module"""
     # Just return a logger - don't configure here to avoid duplicates
