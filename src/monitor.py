@@ -171,17 +171,17 @@ def _parse_log_ts(line: str) -> tuple[Optional[float], str]:
         return None, line
     ts = None
     try:
-        dt = datetime.strptime(match.group("ts"), "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+        dt = datetime.strptime(match.group("ts"), "%Y-%m-%d %H:%M:%S")
         ts = dt.timestamp()
     except Exception:
         pass
     return ts, match.group("msg")
 
 
-def _event(event_type: str, message: str, ts: Optional[float], **extra: Any) -> dict[str, Any]:
+def _event(event_type: str, message: str, event_ts: Optional[float], **extra: Any) -> dict[str, Any]:
     data: dict[str, Any] = {"type": event_type, "message": message}
-    if ts is not None:
-        data["ts"] = ts
+    if event_ts is not None:
+        data["ts"] = event_ts
     data.update(extra)
     return data
 
