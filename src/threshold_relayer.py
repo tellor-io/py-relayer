@@ -22,6 +22,7 @@ from src.layer_client import (
 )
 from src.layer_tx_client import tip
 from src.logger_utils import get_logger
+from src.operator_telemetry import emit_operator_event
 from eth_utils import decode_hex
 
 logger = get_logger(__name__)
@@ -123,6 +124,24 @@ class ThresholdRelayer:
             should_tip,
             should_relay,
         )
+        emit_operator_event(
+            "status",
+            mode=self.mode,
+            query_id=query_id,
+            query_data=_short_hex(query_data),
+            cycle_list=is_cycle_list,
+            report_age_s=report_age_s,
+            consensus_age_s=consensus_age_s,
+            next_heartbeat_in_s=next_hb_in_s,
+            api_price_age_s=api_age_s,
+            should_tip=should_tip,
+            tip_reason=tip_reason,
+            should_relay=should_relay,
+            relay_reason=relay_reason,
+            report_ts_ms=report_ts_ms,
+            attestation_ts_ms=attestation_ts_ms,
+            aggregate_power=aggregate_power,
+        )
         logger.debug(
             "Status details report_ts_ms=%s attestation_ts_ms=%s aggregate_power=%s tip_reason=%s relay_reason=%s",
             report_ts_ms,
@@ -154,6 +173,7 @@ class ThresholdRelayer:
         if self.mode == "backup":
             price_threshold = price_threshold * 2
             self.heartbeat_interval = int(self.heartbeat_interval * 1.25)
+        os.environ["RELAYER_MODE"] = self.mode
         
         logger.info(
             "Starting threshold relayer mode=%s query_id=%s query_data=%s contract_type=%s",
@@ -173,6 +193,20 @@ class ThresholdRelayer:
             max_attestation_age,
             max_data_age,
             min_stake_percentage,
+        )
+        emit_operator_event(
+            "startup",
+            mode=self.mode,
+            query_id=query_id,
+            query_data=_short_hex(query_data),
+            heartbeat_interval_s=self.heartbeat_interval,
+            offset_s=self.offset,
+            check_interval_s=self.check_interval,
+            price_threshold=price_threshold,
+            optimistic_delay_s=optimistic_delay,
+            max_attestation_age_s=max_attestation_age,
+            max_data_age_s=max_data_age,
+            min_stake_pct=min_stake_percentage,
         )
 
         # initialize EVM client
@@ -268,6 +302,13 @@ class ThresholdRelayer:
                         _short_hex(query_data),
                         tip_reason,
                     )
+                    emit_operator_event(
+                        "tip",
+                        mode=self.mode,
+                        query_id=query_id,
+                        query_data=_short_hex(query_data),
+                        reason=tip_reason,
+                    )
                     self.tip_and_wait(query_data, current_ts)
                     latest_agg_report, e = self.get_latest_agg_report(query_id)
                     if e:
@@ -286,6 +327,13 @@ class ThresholdRelayer:
                         _short_hex(query_id),
                         contract_type,
                         relay_reason,
+                    )
+                    emit_operator_event(
+                        "relay",
+                        mode=self.mode,
+                        query_id=query_id,
+                        contract_type=contract_type,
+                        reason=relay_reason,
                     )
                     self.relay_data(
                         evm, query_id, contract_type, optimistic_delay, 
@@ -307,6 +355,7 @@ class ThresholdRelayer:
 
             except Exception as e:
                 logger.exception(f"Unexpected error in main loop: {e}")
+                emit_operator_event("loop_error", mode=self.mode, error=str(e))
 
             # sleep for check interval
             # if tipped for price threshold change on this round, only sleep for 20 seconds
@@ -784,6 +833,7 @@ class ThresholdRelayer:
             if error:
                 # Common, non-fatal: "Add a tip." / "Relay after optimistic timestamp" / "Insufficient attestation power"
                 logger.warning(f"Oracle data not relayed: {error}")
+                emit_operator_event("relay_skipped", query_id=query_id, reason=str(error))
                 return
 
             # Helpful summary of what we're about to relay (INFO-level, once per relay)
@@ -813,9 +863,11 @@ class ThresholdRelayer:
                 return
             
             logger.info(f"Oracle data relay successful - tx: {tx_hash.hex()}")
+            emit_operator_event("relay_success", query_id=query_id, tx_hash=tx_hash.hex())
             
         except Exception as e:
             logger.exception(f"Error in relay_data: {e}")
+            emit_operator_event("relay_error", query_id=query_id, error=str(e))
 
     def get_price_from_api(self) -> tuple[float, Exception]:
         """Get the current price from the API"""
