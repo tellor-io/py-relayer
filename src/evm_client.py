@@ -186,16 +186,27 @@ class EVMClient:
         self.web3_instance.eth.default_account = self.web3_acct.address
         # ensure we are on a healthy provider (switch if rate limited)
         self._ensure_chain_connection()
-        
-        logger.info(f"Connected to Ethereum node: {self.web3_instance.is_connected()}")
-        logger.info(f"Using network: {self.web3_instance.eth.chain_id}")
-        logger.info(f"Using address: {self.web3_instance.eth.default_account}")
-        logger.info(f"Current block number: {self.web3_instance.eth.block_number}")
 
-    def _refresh_web3_if_needed(self):
+        chain_id = self._call_with_provider_failover(
+            lambda w3: w3.eth.chain_id,
+            "reading EVM chain id",
+        )
+        block_number = self._call_with_provider_failover(
+            lambda w3: w3.eth.block_number,
+            "reading EVM block number",
+        )
+
+        logger.info(f"Connected to Ethereum node: {self.web3_instance.is_connected()}")
+        logger.info(f"Using network: {chain_id}")
+        logger.info(f"Using address: {self.web3_instance.eth.default_account}")
+        logger.info(f"Current block number: {block_number}")
+
+    def _refresh_web3_if_needed(self, prefer_next: bool = False):
         if self._evm_resolver and self._evm_network:
             try:
-                self.web3_instance = self._evm_resolver.get_web3(self._evm_network)
+                self.web3_instance = self._evm_resolver.get_web3(self._evm_network, prefer_next=prefer_next)
+                if self.web3_acct:
+                    self.web3_instance.eth.default_account = self.web3_acct.address
             except Exception:
                 # keep existing instance; send will fail and upstream logic will handle
                 pass
@@ -204,8 +215,22 @@ class EVMClient:
         """
         Refresh the web3 provider (switches RPC if current is unhealthy) and return updated (web3, account).
         """
-        self._refresh_web3_if_needed()
+        self._refresh_web3_if_needed(prefer_next=True)
         return self.web3_instance, self.web3_acct
+
+    def _call_with_provider_failover(self, fn, operation_name: str):
+        """
+        Run a lightweight RPC read and, for network-configured clients, retry once
+        on the next provider before surfacing the error.
+        """
+        try:
+            return fn(self.web3_instance)
+        except Exception as e:
+            if not (self._evm_resolver and self._evm_network):
+                raise
+            logger.warning(f"{operation_name} failed; switching EVM RPC provider: {e}")
+            self._refresh_web3_if_needed(prefer_next=True)
+            return fn(self.web3_instance)
 
     def _ensure_chain_connection(self):
         """
@@ -219,7 +244,7 @@ class EVMClient:
                 return
             except Exception as e:
                 logger.warning(f"Web3 health check failed (attempt {attempt + 1}): {e}")
-                self._refresh_web3_if_needed()
+                self._refresh_web3_if_needed(prefer_next=True)
         raise Exception("Unable to establish healthy EVM RPC connection")
 
     def setup_data_bridge_contract(self):
