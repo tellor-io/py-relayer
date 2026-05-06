@@ -1,7 +1,7 @@
 import os
 import threading
 import time
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 from urllib.parse import urlparse
 from web3 import Web3
@@ -72,14 +72,15 @@ class EvmRpcResolver:
         try:
             provider = HTTPProvider(endpoint_uri=url, request_kwargs={"timeout": timeout_ms / 1000.0})
             w3 = Web3(provider)
-            if w3.is_connected():
-                return w3
-            return None
+            # Use a real chain RPC call for health. Some rate-limited providers
+            # can still pass is_connected(), then fail on the next eth_* request.
+            _ = w3.eth.chain_id
+            return w3
         except Exception as e:
             logger.debug(f"RPC connect failed url={url} err={e}")
             return None
 
-    def get_web3(self, network: str) -> Web3:
+    def get_web3(self, network: str, prefer_next: bool = False) -> Web3:
         ns = self._networks.get(network)
         if ns is None:
             raise RuntimeError(f"Unknown EVM network: {network}")
@@ -88,17 +89,29 @@ class EvmRpcResolver:
             now = time.time()
             try_from_top = (now - ns.last_switch_time) >= ns.reset_interval_secs
 
-            # Always attempt from top when try_from_top is True or when we have errors
-            start_indices = list(range(0, len(ns.urls))) if try_from_top else [ns.current_provider_index] + [i for i in range(0, len(ns.urls)) if i != ns.current_provider_index]
+            if prefer_next and len(ns.urls) > 1:
+                next_indices = [
+                    (ns.current_provider_index + offset) % len(ns.urls)
+                    for offset in range(1, len(ns.urls))
+                ]
+                start_indices = next_indices + [ns.current_provider_index]
+            elif try_from_top:
+                start_indices = list(range(0, len(ns.urls)))
+            else:
+                start_indices = [ns.current_provider_index] + [
+                    i for i in range(0, len(ns.urls)) if i != ns.current_provider_index
+                ]
 
             for idx in start_indices:
                 url = ns.urls[idx]
                 w3 = self._attempt_connect(url, ns.health_timeout_ms)
                 if w3 is not None:
-                    if try_from_top or idx != ns.current_provider_index:
+                    selected_new_provider = idx != ns.current_provider_index
+                    if selected_new_provider or try_from_top or prefer_next:
                         ns.last_switch_time = now
-                        ns.current_provider_index = idx
-                        ns.consecutive_errors = 0
+                    ns.current_provider_index = idx
+                    ns.consecutive_errors = 0
+                    if selected_new_provider or try_from_top or prefer_next:
                         logger.info(f"EVM RPC selected network={network} url={_redact_rpc_url(url)}")
                     return w3
 
@@ -114,12 +127,12 @@ class EvmRpcResolver:
             w3 = self.get_web3(network)
             return fn(w3)
         except Exception as e:
-            logger.debug(f"RPC call error on network={network}: {e}")
+            logger.warning(f"RPC call error on network={network}; trying next provider: {e}")
             with ns.lock:
                 ns.consecutive_errors += 1
-                ns.last_switch_time = 0.0  # force try-from-top next time
-            # retry once with fresh provider from top-of-list
-            w3 = self.get_web3(network)
+            # The current provider accepted the connection but failed a real call
+            # (often 429/rate-limit). Try the next configured RPC first.
+            w3 = self.get_web3(network, prefer_next=True)
             return fn(w3)
 
 

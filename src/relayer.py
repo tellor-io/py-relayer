@@ -2,7 +2,26 @@ import time
 import os
 import requests
 from eth_abi import decode
-from src.layer_client import query_validator_set_update, query_latest_oracle_data, get_data_bridge_init_params, get_layer_latest_validator_timestamp, get_next_validator_set_timestamp, get_layer_chain_status, get_data_bridge_reset_params, query_latest_oracle_data, get_attestation_data_before, get_current_power_threshold, get_oracle_proof, get_layer_connection_status, get_layer_chain_id, get_data_before
+from web3 import Web3
+from src.layer_client import (
+    query_latest_oracle_data,
+    get_data_bridge_init_params,
+    get_layer_latest_validator_timestamp,
+    get_layer_chain_status,
+    get_data_bridge_reset_params,
+    get_attestation_data_before,
+    get_current_power_threshold,
+    get_oracle_proof,
+    get_layer_connection_status,
+    get_layer_chain_id,
+    get_data_before,
+    get_valset_by_timestamp,
+    get_validator_checkpoint_params,
+    get_valset_sigs,
+    get_validator_set_index_by_timestamp,
+    get_validator_timestamp_by_index,
+    get_previous_validator_set_timestamp,
+)
 from src.evm_client import EVMClient  # Only import the class
 from src.transformer import transform_data_bridge_init_params, transform_valset_update_params, transform_oracle_update_params, transform_data_bridge_reset_params
 from src.email_client import send_email_alert
@@ -319,18 +338,152 @@ def data_bridge_reset(evm: EVMClient) -> Exception:
     evm.reset_data_bridge_testnet(reset_tx_params)  # Use evm instance method
     return None
 
+def _normalize_eth_address(address: str) -> str:
+    return address.lower()
+
+def _get_bridge_source_valset(evm: EVMClient, validator_timestamp: int) -> tuple[dict, Exception]:
+    layer_source_valset, e = get_valset_by_timestamp(validator_timestamp)
+    if e:
+        return None, e
+    source_checkpoint_params, e = get_validator_checkpoint_params(validator_timestamp)
+    if e:
+        return None, e
+
+    bridge_power_threshold = int(evm.data_bridge_contract.functions.powerThreshold().call())
+    bridge_checkpoint = evm.data_bridge_contract.functions.lastValidatorSetCheckpoint().call()
+    layer_power_threshold = int(source_checkpoint_params["power_threshold"])
+    layer_checkpoint = Web3.to_bytes(hexstr=source_checkpoint_params["checkpoint"])
+    if bridge_power_threshold != layer_power_threshold:
+        return None, Exception(
+            f"Bridge power threshold mismatch at timestamp {validator_timestamp}: "
+            f"bridge={bridge_power_threshold} layer={layer_power_threshold}"
+        )
+    if bridge_checkpoint != layer_checkpoint:
+        return None, Exception(
+            f"Bridge checkpoint mismatch at timestamp {validator_timestamp}: "
+            f"bridge={bridge_checkpoint.hex()} layer={source_checkpoint_params['checkpoint']}"
+        )
+
+    source_index, e = get_validator_set_index_by_timestamp(validator_timestamp)
+    if e:
+        return None, e
+    if source_index is None or "index" not in source_index:
+        return None, Exception(f"layer_client: Invalid source validator timestamp {validator_timestamp}")
+
+    return {
+        "timestamp": int(validator_timestamp),
+        "validator_set": layer_source_valset["bridge_validator_set"],
+        "power_threshold": layer_power_threshold,
+        "index": int(source_index["index"]),
+    }, None
+
+def _reindex_signatures_into_source_order(
+    source_validator_set: list[dict],
+    target_prev_validator_set: list[dict],
+    raw_target_signatures: list[str],
+) -> list[str]:
+    signatures_by_address = {}
+    max_index = min(len(target_prev_validator_set), len(raw_target_signatures))
+    for i in range(max_index):
+        raw_signature = raw_target_signatures[i]
+        if len(raw_signature) == 128:
+            address = _normalize_eth_address(target_prev_validator_set[i]["ethereumAddress"])
+            signatures_by_address[address] = raw_signature
+
+    return [
+        signatures_by_address.get(_normalize_eth_address(validator["ethereumAddress"]), "")
+        for validator in source_validator_set
+    ]
+
+def _get_signed_power(validators: list[dict], sigs: list[dict]) -> int:
+    total_power = 0
+    max_index = min(len(validators), len(sigs))
+    for i in range(max_index):
+        if int(sigs[i]["v"]) != 0:
+            total_power += int(validators[i]["power"])
+    return total_power
+
+def _build_candidate_valset_update(source_valset: dict, target_timestamp: int) -> tuple[dict, Exception]:
+    valset_sigs, e = get_valset_sigs(target_timestamp)
+    if e:
+        return None, e
+    valset_checkpoint, e = get_validator_checkpoint_params(target_timestamp)
+    if e:
+        return None, e
+    previous_timestamp, e = get_previous_validator_set_timestamp(target_timestamp)
+    if e:
+        return None, e
+    target_previous_valset, e = get_valset_by_timestamp(previous_timestamp)
+    if e:
+        return None, e
+
+    source_aligned_signatures = _reindex_signatures_into_source_order(
+        source_valset["validator_set"],
+        target_previous_valset["bridge_validator_set"],
+        valset_sigs.get("signatures", []),
+    )
+    candidate_params = {
+        "valset_sigs": {"signatures": source_aligned_signatures},
+        "valset_checkpoint": valset_checkpoint,
+        "previous_valset": {"bridge_validator_set": source_valset["validator_set"]},
+    }
+    tx_params = transform_valset_update_params(candidate_params)
+    signed_power = _get_signed_power(tx_params["current_validator_set"], tx_params["sigs"])
+    return {
+        "target_timestamp": int(target_timestamp),
+        "signed_power": signed_power,
+        "tx_params": tx_params,
+    }, None
+
+def _find_furthest_reachable_valset_update(source_valset: dict, latest_layer_timestamp: int) -> tuple[dict, Exception]:
+    latest_index, e = get_validator_set_index_by_timestamp(latest_layer_timestamp)
+    if e:
+        return None, e
+    if latest_index is None or "index" not in latest_index:
+        return None, Exception(f"layer_client: Invalid latest validator timestamp {latest_layer_timestamp}")
+
+    latest_index_value = int(latest_index["index"])
+    for target_index in range(latest_index_value, source_valset["index"], -1):
+        target_timestamp_response, e = get_validator_timestamp_by_index(target_index)
+        if e:
+            return None, e
+        target_timestamp = int(target_timestamp_response["timestamp"])
+        candidate, e = _build_candidate_valset_update(source_valset, target_timestamp)
+        if e:
+            return None, e
+        logger.debug(
+            "Evaluated valset target source_ts=%s target_ts=%s signed_power=%s threshold=%s",
+            source_valset["timestamp"],
+            target_timestamp,
+            candidate["signed_power"],
+            source_valset["power_threshold"],
+        )
+        if candidate["signed_power"] >= source_valset["power_threshold"]:
+            return candidate, None
+    return None, None
+
 def update_to_latest_layer_validator_set(evm: EVMClient, data_bridge_validator_timestamp: str, layer_validator_timestamp: str) -> Exception:
     while int(data_bridge_validator_timestamp) < int(layer_validator_timestamp):
-        next_validator_timestamp, e = get_next_validator_set_timestamp(data_bridge_validator_timestamp)
+        source_valset, e = _get_bridge_source_valset(evm, int(data_bridge_validator_timestamp))
         if e:
             return e
-        valset_update_params, e = query_validator_set_update(next_validator_timestamp)
+        candidate, e = _find_furthest_reachable_valset_update(source_valset, int(layer_validator_timestamp))
         if e:
             return e
-        logger.debug(f"Valset update params: {valset_update_params}")
-        valset_update_tx_params = transform_valset_update_params(valset_update_params)
-        logger.debug(f"Valset update tx params: {valset_update_tx_params}")
-        _, e = evm.update_validator_set(valset_update_tx_params)  # Use evm instance method
+        if candidate is None:
+            return Exception(
+                f"No reachable validator-set relay found from bridge timestamp "
+                f"{data_bridge_validator_timestamp} to latest layer timestamp {layer_validator_timestamp}"
+            )
+
+        logger.info(
+            "Updating validator set source_ts=%s target_ts=%s signed_power=%s threshold=%s",
+            source_valset["timestamp"],
+            candidate["target_timestamp"],
+            candidate["signed_power"],
+            source_valset["power_threshold"],
+        )
+        _, e = evm.update_validator_set(candidate["tx_params"])  # Use evm instance method
         if e:
             return e
         logger.info("Submitted valset update tx")

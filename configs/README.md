@@ -57,6 +57,18 @@ price_api_url = "https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_c
 - `[commands.<command>]` - Default values for CLI command options
 - `extends` - List of parent configs to inherit from (deep-merged)
 
+### Valset Relayer Config
+
+The `relay-valset` command also supports config defaults via `[commands.relay-valset]`:
+
+```toml
+[commands.relay-valset]
+sleep_time = 600
+fixed_interval = false
+```
+
+The valset relayer now automatically skips directly to the furthest reachable Layer validator set. It still uses the bridge's current trusted validator set as the source set for each relay, but it no longer has to advance one validator set at a time when a larger skip is provable.
+
 ### Price Service Schema (price-service.toml)
 ```toml
 [server]

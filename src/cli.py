@@ -1,6 +1,7 @@
 import click
 from dotenv import load_dotenv
 import os
+from pathlib import Path
 from src.relayer import start_relayer, update_user_oracle_data, data_bridge_init, data_bridge_reset
 from src.threshold_relayer import start_primary_threshold_relayer, start_backup_threshold_relayer
 from src.bridge_client import relay_withdraw
@@ -11,6 +12,7 @@ from src.logger_utils import get_logger
 from src.valset_relayer import start_valset_relayer
 from src.query_parser import QueryParser
 from src.config_loader import load_config, apply_env, build_default_map
+from src.monitor import build_snapshot, write_outputs
 from src.price_service import run_price_service
 from eth_utils import decode_hex
 
@@ -496,6 +498,61 @@ def parse_query(query_string, verbose, no_color):
         
     except Exception as e:
         logger.error(f"❌ Error parsing query string: {e}")
+        exit(1)
+
+@cli.command()
+@add_logging_options
+@click.option('--configs-dir', default='configs', help='Relayer configs directory')
+@click.option('--logs-dir', default='logs', help='Relayer logs directory')
+@click.option('--network', multiple=True, help='Only monitor this config network; may be repeated')
+@click.option('--exclude-backups', is_flag=True, help='Ignore networks whose config directory ends with -backup')
+@click.option('--skip-chain', is_flag=True, help='Only inspect config inventory, screens, and logs')
+@click.option('--skip-evm', is_flag=True, help='Run Layer probes but skip EVM RPC/contract probes')
+@click.option('--tail-bytes', type=int, default=524288, help='Bytes to read from the end of each log')
+@click.option('--status-log-every', envvar='STATUS_LOG_EVERY', type=int, default=300, help='Expected periodic status log interval')
+@click.option('--json-output', type=click.Path(dir_okay=False), help='Write JSON snapshot to this file instead of stdout')
+@click.option('--prometheus-output', type=click.Path(dir_okay=False), help='Write Prometheus textfile metrics to this path')
+@click.option('--daily-reconcile', is_flag=True, help='Include per-feed reconciliation summary from recent log events')
+@click.option('--lookback-hours', type=int, default=24, help='Daily reconciliation lookback window')
+def monitor(configs_dir, logs_dir, network, exclude_backups, skip_chain, skip_evm, tail_bytes,
+            status_log_every, json_output, prometheus_output, daily_reconcile, lookback_hours,
+            verbose, no_color):
+    """Inspect relayer process/log/Layer/EVM health without sending transactions."""
+    configure_logging(verbose=verbose, no_color=no_color)
+    repo_root = Path(__file__).resolve().parents[1]
+    configs_path = Path(configs_dir)
+    logs_path = Path(logs_dir)
+    if not configs_path.is_absolute():
+        configs_path = repo_root / configs_path
+    if not logs_path.is_absolute():
+        logs_path = repo_root / logs_path
+
+    try:
+        snapshot = build_snapshot(
+            repo_root=repo_root,
+            configs_dir=configs_path,
+            logs_dir=logs_path,
+            networks=tuple(network),
+            exclude_backups=exclude_backups,
+            skip_chain=skip_chain,
+            skip_evm=skip_evm,
+            tail_bytes=tail_bytes,
+            status_log_every_s=status_log_every,
+            daily_reconcile=daily_reconcile,
+            lookback_hours=lookback_hours,
+        )
+        rendered = write_outputs(snapshot, json_output, prometheus_output)
+        if json_output:
+            critical = snapshot["aggregate"]["alert_counts"].get("critical", 0)
+            warning = snapshot["aggregate"]["alert_counts"].get("warning", 0)
+            click.echo(
+                f"Wrote relayer monitor snapshot for {snapshot['feed_count']} feeds "
+                f"({critical} critical, {warning} warning)."
+            )
+        else:
+            click.echo(rendered)
+    except Exception as e:
+        logger.error(f"Error building relayer monitor snapshot: {e}")
         exit(1)
 
 if __name__ == '__main__':
