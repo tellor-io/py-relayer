@@ -17,6 +17,7 @@ from eth_utils import decode_hex
 from web3 import Web3
 
 from src import config_loader
+from src.evm_account import resolve_evm_account_address
 from src.evm_rpc import EvmRpcResolver
 from src.query_parser import QueryParser
 
@@ -589,25 +590,20 @@ class EvmProbe:
                 raw_data = bank.functions.getCurrentAggregateData(decode_hex(feed.query_id)).call()
                 state["tellor_data_bank"] = self._decode_data_bank(raw_data)
 
-            account = self._evm_account()
-            if account:
+            account_address = self._evm_account_address(web3.eth.chain_id)
+            if account_address:
                 state["relayer_wallet"] = {
-                    "address": account.address,
-                    "balance_wei": web3.eth.get_balance(account.address),
-                    "nonce": web3.eth.get_transaction_count(account.address),
+                    "address": account_address,
+                    "balance_wei": web3.eth.get_balance(account_address),
+                    "nonce": web3.eth.get_transaction_count(account_address),
                 }
         except Exception as exc:
             state["error"] = str(exc)
         return state
 
-    def _evm_account(self) -> Any:
-        private_key = os.getenv("ETH_PRIVATE_KEY")
-        if not private_key:
-            return None
+    def _evm_account_address(self, chain_id: int) -> Optional[str]:
         try:
-            from eth_account import Account
-
-            return Account.from_key(private_key)
+            return resolve_evm_account_address(chain_id=chain_id)
         except Exception:
             return None
 

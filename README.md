@@ -29,9 +29,33 @@ cp .env.example .env
 
 CLI flags override config values, and config values override `.env`.
 
+## EVM Signer Configuration
+
+Prefer encrypted `chained-accounts` keystores for EVM transaction signing. The relayer can use the same keystores that Telliot uses, stored by `chained-accounts` under `~/.chained_accounts/<name>.json`.
+
+Create or inspect relayer keystores with:
+
+```bash
+relayer account add relayer-sepolia 0xYOUR_PRIVATE_KEY 11155111
+relayer account find --name relayer-sepolia
+relayer account key relayer-sepolia
+```
+
+Configure a keystore signer with:
+
+```bash
+export EVM_ACCOUNT_NAME="relayer-sepolia"
+export EVM_KEYSTORE_PASSWORD="..."  # prefer systemd/secret-manager injection for services
+```
+
+You can also set `EVM_ACCOUNT_ADDRESS` as an extra safety check, or omit `EVM_ACCOUNT_NAME` and let the relayer select the only keystore matching the connected EVM chain. If multiple accounts match, the relayer will require `EVM_ACCOUNT_NAME`.
+
+`ETH_PRIVATE_KEY` and `--eth-private-key` remain supported as a legacy fallback, but production relayers should avoid storing raw private keys in `.env`.
+
 ## Commands In Use
 
 The commands currently used in operations are:
+- `account`
 - `init`
 - `parse-query`
 - `relay-bridge`

@@ -6,6 +6,7 @@ TOKEN_BRIDGE_LEGACY_ADDRESS = "0x62733e63499a25E35844c91275d4c3bdb159D29d"  # op
 LAYER_USER_ADDRESS = "0x3d3263d0c2637ea55dea4110edd4f2cf3102f613"   # TellorDataBank sepolia
 LAYER_TX_CREATOR_ADDRESS = "${LAYER_TX_CREATOR_ADDRESS_1}"  # Your Layer address
 PRICE_SOURCE = "telliot-feeds"
+EVM_ACCOUNT_NAME = "${EVM_ACCOUNT_NAME_1}"  # Preferred: encrypted chained-accounts keystore name
 
 # Chain endpoints
 LAYER_SWAGGER_ENDPOINT = "https://node-palmito.tellorlayer.com"

@@ -1,4 +1,4 @@
-from web3 import Web3, Account
+from web3 import Web3
 import json
 import os
 from dotenv import load_dotenv
@@ -6,6 +6,7 @@ import time
 import random
 from typing import Callable, Optional, Tuple
 from src.contract_adapters import get_contract_adapter
+from src.evm_account import resolve_evm_account
 from src.logger_utils import get_logger
 from src.evm_rpc import EvmRpcResolver
 
@@ -167,7 +168,6 @@ class EVMClient:
 
     def init_web3(self):
         provider_url = os.getenv("WEB3_PROVIDER_URL")
-        private_key = os.getenv("ETH_PRIVATE_KEY")
         evm_network = os.getenv("EVM_NETWORK")
         
         # setup provider (direct URL) or via resolver (network)
@@ -179,11 +179,6 @@ class EVMClient:
             self.web3_instance = self._evm_resolver.get_web3(evm_network)
         else:
             raise Exception("Must set WEB3_PROVIDER_URL or EVM_NETWORK")
-        # set private key
-        self.web3_instance.eth.account.enable_unaudited_hdwallet_features()
-        self.web3_acct = Account.from_key(private_key)
-        # web3.py v6 uses default_account instead of defaultAccount
-        self.web3_instance.eth.default_account = self.web3_acct.address
         # ensure we are on a healthy provider (switch if rate limited)
         self._ensure_chain_connection()
 
@@ -191,6 +186,10 @@ class EVMClient:
             lambda w3: w3.eth.chain_id,
             "reading EVM chain id",
         )
+        self.web3_acct = resolve_evm_account(chain_id=chain_id)
+        # web3.py v6 uses default_account instead of defaultAccount
+        self.web3_instance.eth.default_account = self.web3_acct.address
+
         block_number = self._call_with_provider_failover(
             lambda w3: w3.eth.block_number,
             "reading EVM block number",
@@ -199,6 +198,7 @@ class EVMClient:
         logger.info(f"Connected to Ethereum node: {self.web3_instance.is_connected()}")
         logger.info(f"Using network: {chain_id}")
         logger.info(f"Using address: {self.web3_instance.eth.default_account}")
+        logger.info(f"Using EVM signer source: {self.web3_acct.source}")
         logger.info(f"Current block number: {block_number}")
 
     def _refresh_web3_if_needed(self, prefer_next: bool = False):
